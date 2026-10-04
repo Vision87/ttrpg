@@ -1,0 +1,21 @@
+{
+  "id": "dnd35-selected",
+  "version": "1.0.0",
+  "dependencies": {"dnd35-core": ">=1.0.0"},
+  "definitions": {
+    "item.emberbound-blade": {
+      "id": "item.emberbound-blade",
+      "type": "item",
+      "base": "item.longsword",
+      "damage_type": "fire",
+      "effects": [{"type": "damage", "formula": "1d6"}]
+    }
+  },
+  "operations": [
+    {
+      "action": "alias",
+      "definition_id": "item.firebrand",
+      "target_id": "item.emberbound-blade"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "id": "dark-heresy-core",
+  "version": "1.0.0",
+  "dice_model": "d100_roll_under",
+  "dependencies": {},
+  "definitions": {
+    "characteristic.weapon_skill": {"id": "characteristic.weapon_skill", "type": "characteristic", "abbreviation": "WS"},
+    "characteristic.ballistic_skill": {"id": "characteristic.ballistic_skill", "type": "characteristic", "abbreviation": "BS"},
+    "characteristic.strength": {"id": "characteristic.strength", "type": "characteristic", "abbreviation": "S", "modifier_formula": "score//10"},
+    "characteristic.toughness": {"id": "characteristic.toughness", "type": "characteristic", "abbreviation": "T", "modifier_formula": "score//10"},
+    "characteristic.agility": {"id": "characteristic.agility", "type": "characteristic", "abbreviation": "Ag", "modifier_formula": "score//10"},
+    "characteristic.intelligence": {"id": "characteristic.intelligence", "type": "characteristic", "abbreviation": "Int", "modifier_formula": "score//10"},
+    "characteristic.perception": {"id": "characteristic.perception", "type": "characteristic", "abbreviation": "Per", "modifier_formula": "score//10"},
+    "characteristic.willpower": {"id": "characteristic.willpower", "type": "characteristic", "abbreviation": "WP", "modifier_formula": "score//10"},
+    "characteristic.fellowship": {"id": "characteristic.fellowship", "type": "characteristic", "abbreviation": "Fel", "modifier_formula": "score//10"},
+    "homeworld.hive_world": {
+      "id": "homeworld.hive_world",
+      "type": "homeworld",
+      "modifiers": [
+        {"target": "characteristic.fellowship", "formula": "-5"},
+        {"target": "characteristic.agility", "formula": "5"}
+      ]
+    },
+    "homeworld.imperial_world": {
+      "id": "homeworld.imperial_world",
+      "type": "homeworld",
+      "modifiers": [
+        {"target": "characteristic.willpower", "formula": "3"}
+      ]
+    },
+    "career.guardsman": {
+      "id": "career.guardsman",
+      "type": "career",
+      "primary_characteristics": ["BS", "T", "Ag"],
+      "starting_wounds_formula": "10 + 1d5"
+    },
+    "career.psyker": {
+      "id": "career.psyker",
+      "type": "career",
+      "primary_characteristics": ["WP", "Int"],
+      "starting_wounds_formula": "8 + 1d5"
+    },
+    "skill.awareness": {"id": "skill.awareness", "type": "skill", "characteristic": "characteristic.perception"},
+    "skill.dodge": {"id": "skill.dodge", "type": "skill", "characteristic": "characteristic.agility"},
+    "skill.inquiry": {"id": "skill.inquiry", "type": "skill", "characteristic": "characteristic.fellowship"},
+    "talent.marksman": {
+      "id": "talent.marksman",
+      "type": "talent",
+      "prerequisites": [{"rule": "ballistic_skill", "minimum": 35}],
+      "modifiers": [
+        {"target": "ranged_range_penalty", "formula": "0"}
+      ]
+    },
+    "talent.iron_jaw": {
+      "id": "talent.iron_jaw",
+      "type": "talent",
+      "prerequisites": [{"rule": "toughness", "minimum": 40}]
+    },
+    "item.lasgun": {
+      "id": "item.lasgun",
+      "type": "item",
+      "category": "basic_ranged",
+      "damage": "1d10+3",
+      "penetration": 0,
+      "range": 100,
+      "clip": 60
+    },
+    "item.chainsword": {
+      "id": "item.chainsword",
+      "type": "item",
+      "category": "melee",
+      "damage": "1d10+2",
+      "penetration": 2
+    },
+    "item.flak_jacket": {
+      "id": "item.flak_jacket",
+      "type": "item",
+      "category": "armor",
+      "armor_points": 3,
+      "coverage": ["body", "arms"]
+    },
+    "damage_model.dark_heresy": {
+      "id": "damage_model.dark_heresy",
+      "type": "damage_model",
+      "dice_model": "d100_roll_under"
+    },
+    "monster.cultist": {
+      "id": "monster.cultist",
+      "type": "monster",
+      "wounds": 8,
+      "armor": 2,
+      "ballistic_skill": 25,
+      "weapon_skill": 25,
+      "equipment": ["item.lasgun"]
+    },
+    "template.guardsman-scout": {
+      "id": "template.guardsman-scout",
+      "type": "template",
+      "homeworld": "homeworld.hive_world",
+      "career": "career.guardsman",
+      "talents": ["talent.marksman"],
+      "equipment": ["item.lasgun", "item.flak_jacket"]
+    }
+  },
+  "operations": []
+}

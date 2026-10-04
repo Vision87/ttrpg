@@ -1,0 +1,48 @@
+{
+  "id": "dnd35-core",
+  "version": "1.0.0",
+  "dependencies": {},
+  "definitions": {
+    "race.human": {"id": "race.human", "type": "race", "size": "medium", "speed": 30},
+    "race.elf": {"id": "race.elf", "type": "race", "size": "medium", "speed": 30},
+    "ability.strength": {"id": "ability.strength", "type": "ability", "modifier_formula": "(score-10)//2"},
+    "ability.dexterity": {"id": "ability.dexterity", "type": "ability", "modifier_formula": "(score-10)//2"},
+    "class.fighter": {"id": "class.fighter", "type": "class", "hit_die": 10, "base_attack_progression": "full"},
+    "class.wizard": {"id": "class.wizard", "type": "class", "hit_die": 4, "base_attack_progression": "poor"},
+    "level.fighter.1": {"id": "level.fighter.1", "type": "level", "class": "class.fighter", "level": 1},
+    "skill.acrobatics": {"id": "skill.acrobatics", "type": "skill", "ability": "dexterity"},
+    "feat.power-attack": {
+      "id": "feat.power-attack",
+      "type": "feat",
+      "prerequisites": [{"rule": "strength", "minimum": 13}],
+      "modifiers": [
+        {"target": "attack_roll", "formula": "-choice.penalty"},
+        {"target": "melee_damage", "formula": "choice.penalty"}
+      ]
+    },
+    "spell.magic-missile": {
+      "id": "spell.magic-missile",
+      "type": "spell",
+      "level": 1,
+      "formula": "1d4+1"
+    },
+    "item.longsword": {
+      "id": "item.longsword",
+      "type": "item",
+      "damage": "1d8",
+      "proficiency": "martial"
+    },
+    "condition.stunned": {"id": "condition.stunned", "type": "condition", "duration": {"kind": "rounds"}},
+    "monster.goblin": {"id": "monster.goblin", "type": "monster", "hit_die": 1},
+    "template.defensive-fighter": {
+      "id": "template.defensive-fighter",
+      "type": "template",
+      "race": "race.human",
+      "class_levels": [{"class": "class.fighter", "level": 1}],
+      "recommended_abilities": ["strength", "constitution"],
+      "feats": ["feat.power-attack"],
+      "equipment": ["item.longsword"]
+    }
+  },
+  "operations": []
+}
