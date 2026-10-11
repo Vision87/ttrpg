@@ -24,22 +24,22 @@
 
 ## 4. Authoritative Session Board (Multi-User & Solo AI Director)
 
-- [ ] 4.1 Refactor session runtime to support role-based controllers (`GMController`, `PlayerController`, `AutonomousDirectorController`) and permission gating, verified with controller authorization tests.
-- [ ] 4.2 Implement dynamic fog-of-war and tile visibility filtering per player based on character line-of-sight, verified by client snapshot visibility tests.
-- [ ] 4.3 Implement universal round, turn order, and initiative tracking across varied ruleset systems, verified with combat sequencing tests.
-- [ ] 4.4 Implement the single-player autonomous AI director with an oracle engine to resolve narrative questions and scene progression, verified by solo oracle outcome tests.
-- [ ] 4.5 Implement reactive tactical NPC AI behaviors for solo mode encounters (threat assessment, movement, action selection), verified with automated NPC combat turn tests.
+- [x] 4.1 Refactor session runtime to support role-based controllers (`GMController`, `PlayerController`, `AutonomousDirectorController`) and permission gating, verified with controller authorization tests.
+- [x] 4.2 Implement dynamic fog-of-war and tile visibility filtering per player based on character line-of-sight, verified by client snapshot visibility tests.
+- [x] 4.3 Implement universal round, turn order, and initiative tracking across varied ruleset systems, verified with combat sequencing tests.
+- [x] 4.4 Implement the single-player autonomous AI director with an oracle engine to resolve narrative questions and scene progression, verified by solo oracle outcome tests.
+- [x] 4.5 Implement reactive tactical NPC AI behaviors for solo mode encounters (threat assessment, movement, action selection), verified with automated NPC combat turn tests.
 
 ## 5. Multimedia Presentation & Audiovisual FX Pipeline
 
-- [ ] 5.1 Implement the presentation event mapping registry that translates authoritative session events into animation, audio, and visual particle cues, verified with event projection tests.
-- [ ] 5.2 Implement token animation state machine adapters (idle, walk, attack, hurt, down) for tactical and 3D projections, verified by animation state transition assertions.
-- [ ] 5.3 Implement spatial 3D audio and ambient soundscape manager contracts, verified by sound playback trigger tests in the projection layer.
-- [ ] 5.4 Implement visual FX particle and shader trigger contracts (projectile trajectories, area-of-effect bounds, spell impacts, status auras), verified by FX event dispatch tests.
-- [ ] 5.5 Update `UnityClient` scripts and session DTOs to ingest multimedia cues and render dynamic tilemaps and FX, verified with Unity client contract tests.
+- [x] 5.1 Implement the presentation event mapping registry that translates authoritative session events into animation, audio, and visual particle cues, verified with event projection tests.
+- [x] 5.2 Implement token animation state machine adapters (idle, walk, attack, hurt, down) for tactical and 3D projections, verified by animation state transition assertions.
+- [x] 5.3 Implement spatial 3D audio and ambient soundscape manager contracts, verified by sound playback trigger tests in the projection layer.
+- [x] 5.4 Implement visual FX particle and shader trigger contracts (projectile trajectories, area-of-effect bounds, spell impacts, status auras), verified by FX event dispatch tests.
+- [x] 5.5 Update `UnityClient` scripts and session DTOs to ingest multimedia cues and render dynamic tilemaps and FX, verified with Unity client contract tests.
 
 ## 6. End-to-End Integration & Verification
 
-- [ ] 6.1 Create an end-to-end integration test running a solo session: ingest a text quest, generate board tiles, deploy a character, and execute combat with AI-controlled NPCs.
-- [ ] 6.2 Create an end-to-end integration test running a multi-user session with GM and player controller synchronization and fog-of-war validation.
-- [ ] 6.3 Run the full test suite (`PYTHONPATH=. python3 tests/run_all.py`) and verify that all existing and new checks pass with zero regressions.
+- [x] 6.1 Create an end-to-end integration test running a solo session: ingest a text quest, generate board tiles, deploy a character, and execute combat with AI-controlled NPCs.
+- [x] 6.2 Create an end-to-end integration test running a multi-user session with GM and player controller synchronization and fog-of-war validation.
+- [x] 6.3 Run the full test suite (`PYTHONPATH=. python3 tests/run_all.py`) and verify that all existing and new checks pass with zero regressions.

@@ -37,12 +37,38 @@ TESTS = [
     ("compatibility_test", ["test_missing_custom_package_blocks_play_and_supports_read_only_preview", "test_migration_creates_a_new_branch_and_preserves_source"]),
     ("session_runtime_test", ["test_authorized_action_is_atomic_and_replayable", "test_unauthorized_action_is_rejected_without_state_change"]),
     ("session_sync_test", ["test_duplicate_submission_does_not_duplicate_event"]),
+    ("controller_authorization_test", [
+        "test_gm_controller_omniscient_actions",
+        "test_player_controller_restricted_permissions",
+        "test_autonomous_director_controller_permissions",
+    ]),
+    ("snapshot_visibility_test", [
+        "test_hiding_unrevealed_monsters_and_tiles_from_player_snapshot",
+    ]),
+    ("combat_sequencing_test", [
+        "test_universal_initiative_sorting_and_turn_progression",
+    ]),
+    ("solo_oracle_test", [
+        "test_oracle_determines_probabilistic_narrative_outcomes",
+        "test_oracle_scene_advancement_and_interruption",
+        "test_autonomous_director_session_submission",
+    ]),
+    ("npc_combat_ai_test", [
+        "test_npc_melee_movement_and_attack_turn",
+        "test_npc_ranged_attack_without_closing_distance",
+    ]),
     ("projections_test", ["test_2d_and_3d_projections_share_authoritative_state", "test_immersive_projection_uses_fallback_asset", "test_tactical_projection_reports_out_of_range_target"]),
     ("entry_test", ["test_incompatible_character_can_preview_but_not_play"]),
     ("assets_test", ["test_asset_revision_and_renderer_fallback", "test_invalid_asset_metadata_is_rejected"]),
     ("presentation_resolver_test", ["test_asset_reference_stays_pinned_until_explicit_update", "test_missing_presentation_asset_is_diagnostic_only"]),
     ("integration_test", ["test_beginner_character_to_2d_and_3d_play", "test_homebrew_character_is_blocked_and_branchable", "test_cross_campaign_state_and_asset_independence"]),
     ("unity_client_contract_test", ["test_unity_client_contract_files_exist", "test_unity_client_keeps_rules_out_of_projections"]),
+    ("multimedia_presentation_test", [
+        "test_presentation_event_mapping_registry",
+        "test_token_animation_state_machine_transitions",
+        "test_spatial_3d_audio_and_ambient_soundscapes",
+        "test_visual_fx_particle_and_aoe_bounds",
+    ]),
     ("resolution_test", [
         "test_d20_resolution_and_modifier_stacking",
         "test_d100_roll_under_and_degrees_of_success",
@@ -60,6 +86,10 @@ TESTS = [
         "test_presentation_profile_customization_and_validation",
         "test_ruleset_validated_equipment_and_slots",
         "test_talent_and_feat_prerequisite_validation",
+    ]),
+    ("platform_e2e_integration_test", [
+        "test_e2e_solo_session_ingestion_and_ai_combat",
+        "test_e2e_multi_user_session_synchronization_and_fog_of_war",
     ]),
 ]
 
