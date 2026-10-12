@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 
+class StatEvaluationError(ValueError):
+    """Raised when a ruleset requests an unsupported derived-stat formula."""
+
+
 def evaluate_stats(
     attributes: dict[str, int],
     ruleset_definitions: dict[str, dict[str, Any]] | None = None,
@@ -26,18 +30,22 @@ def evaluate_stats(
                 elif formula == "score//10":
                     val = score // 10
                 else:
-                    val = (score - 10) // 2
+                    raise StatEvaluationError(
+                        f"Unsupported modifier formula '{formula}' for {def_id}"
+                    )
                 derived[f"{key}_modifier"] = {
                     "value": val,
                     "sources": [{"field": f"abilities.{key}", "value": score}],
                 }
 
     # Check if Dark Heresy / d100 characteristics are present
-    is_dark_heresy = (
-        system_hint == "dark_heresy"
-        or "ballistic_skill" in attributes
-        or "weapon_skill" in attributes
-        or "toughness" in attributes
+    is_dark_heresy = system_hint == "dark_heresy" or (
+        system_hint is None
+        and (
+            "ballistic_skill" in attributes
+            or "weapon_skill" in attributes
+            or "toughness" in attributes
+        )
     )
 
     if is_dark_heresy:
@@ -86,7 +94,10 @@ def evaluate_stats(
         }
 
     # Standard / d20 D&D ability attributes
-    if not is_dark_heresy or "constitution" in attributes or ("strength" in attributes and "strength_modifier" not in derived):
+    is_dnd35 = system_hint == "dnd35" or (
+        system_hint is None and not is_dark_heresy
+    )
+    if is_dnd35:
         for ability in (
             "strength",
             "dexterity",

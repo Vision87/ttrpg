@@ -1,0 +1,28 @@
+{
+    "Version": 2,
+    "BuildContentOptions": [
+        "None"
+    ],
+    "BuildManifestHash": "00000000000000000000000000000000",
+    "BuildName": "UnityClient",
+    "BuildOptions": [
+        "None"
+    ],
+    "BuildProfilePath": "",
+    "BuildResult": 1,
+    "BuildResultName": "Succeeded",
+    "BuildSessionGUID": "cbd12491ddb48413ca4be88bb74e3c1c",
+    "BuildStartedAt": "2026-10-11T17:50:51.4550360Z",
+    "BuildType": 1,
+    "BuildTypeName": "Player",
+    "ContentSourceBuildSessionGUID": "804753585bdea4fd8a67f03c1edc4fc5",
+    "OutputPath": "/Users/vision/Documents/src/experiment/UnityClient/Build/WebGL",
+    "Platform": 20,
+    "PlatformName": "WebGL",
+    "Subtarget": 0,
+    "SubtargetName": "0",
+    "TotalErrors": 0,
+    "TotalSizeBytes": 6686163,
+    "TotalTimeMs": 49772,
+    "TotalWarnings": 0
+}

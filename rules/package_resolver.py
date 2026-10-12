@@ -43,6 +43,13 @@ class PackageResolver:
         self,
         requested: list[tuple[str, str]],
     ) -> dict[str, dict[str, Any]]:
+        definitions, _ = self.resolve_with_versions(requested)
+        return definitions
+
+    def resolve_with_versions(
+        self,
+        requested: list[tuple[str, str]],
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
         selected: dict[str, Package] = {}
         visiting: set[str] = set()
 
@@ -89,7 +96,10 @@ class PackageResolver:
         for package in ordered:
             for operation in package.operations:
                 self._apply_operation(resolved, operation, package)
-        return resolved
+        versions = {
+            package.package_id: package.version for package in selected.values()
+        }
+        return resolved, versions
 
     def _find_dependency(self, package_id: str, requirement: str) -> Package:
         candidates = [

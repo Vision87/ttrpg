@@ -14,6 +14,7 @@ public abstract class SessionProjection : MonoBehaviour
         {
             return;
         }
+        ApplyTheme(envelope.theme);
 
         foreach (var entity in envelope.snapshot.entities)
         {
@@ -26,6 +27,7 @@ public abstract class SessionProjection : MonoBehaviour
             {
                 rendered = CreateEntity(entity);
                 RenderedEntities.Add(entity.id, rendered);
+                ApplyEntityPresentation(rendered, entity, envelope.theme);
             }
 
             rendered.transform.position = ToWorldPosition(entity.position);
@@ -42,6 +44,39 @@ public abstract class SessionProjection : MonoBehaviour
     }
 
     protected abstract Vector3 ToWorldPosition(PositionDto position);
+
+    private static void ApplyTheme(ThemeDto theme)
+    {
+        if (theme == null || theme.tokens == null || Camera.main == null)
+        {
+            return;
+        }
+        if (ColorUtility.TryParseHtmlString(theme.tokens.background, out var background))
+        {
+            Camera.main.backgroundColor = background;
+        }
+    }
+
+    private static void ApplyEntityPresentation(
+        GameObject rendered,
+        EntityDto entity,
+        ThemeDto theme)
+    {
+        if (entity.presentation != null && entity.presentation.scale > 0f)
+        {
+            rendered.transform.localScale *= entity.presentation.scale;
+        }
+        var renderer = rendered.GetComponent<Renderer>();
+        var colorToken = entity.kind == "character"
+            ? theme?.tokens?.accent
+            : theme?.tokens?.primary;
+        if (renderer != null &&
+            !string.IsNullOrEmpty(colorToken) &&
+            ColorUtility.TryParseHtmlString(colorToken, out var color))
+        {
+            renderer.material.color = color;
+        }
+    }
 
     protected virtual void RenderEvents(SessionEventDto[] events)
     {

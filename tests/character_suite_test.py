@@ -1,5 +1,8 @@
 """Unit tests for universal character builder suite, presentation profile, equipment, and prerequisites."""
 
+import json
+from pathlib import Path
+
 from character.workflow import CreationWorkflow
 from character.presentation import PresentationProfile
 from character.equipment import Equipment, EquipmentState
@@ -158,3 +161,203 @@ def test_talent_and_feat_prerequisite_validation() -> None:
     assert len(issues) == 1
     assert issues[0].code == "unmet-prerequisite"
     assert "ballistic_skill >= 35" in issues[0].message
+
+
+def test_feat_prerequisite_validation_supports_feats_skills_and_unknown_rules() -> None:
+    builder = CharacterBuilder.from_scratch(
+        character_id="feat-prerequisites",
+        name="A fighter",
+        package_versions={"dnd35-core": "1.0.0"},
+        policy="strict",
+    )
+    builder.set_ability("strength", 13)
+    builder.choose("feats", "feat.power-attack")
+    builder.choose("feats", "feat.cleave")
+    builder.character.skill_ranks["skill.ride"] = 1
+    builder.choose("feats", "feat.mounted-combat")
+    definitions = {
+        "feat.power-attack": {"id": "feat.power-attack", "name": "Power Attack"},
+        "feat.cleave": {
+            "id": "feat.cleave",
+            "name": "Cleave",
+            "prerequisites": [
+                {"rule": "strength", "minimum": 13},
+                {
+                    "rule": "feat",
+                    "definition_id": "feat.power-attack",
+                    "description": "Power Attack",
+                },
+            ],
+        },
+        "feat.mounted-combat": {
+            "id": "feat.mounted-combat",
+            "name": "Mounted Combat",
+            "prerequisites": [
+                {
+                    "rule": "skill",
+                    "skill_id": "skill.ride",
+                    "minimum": 1,
+                    "description": "Ride 1 rank",
+                }
+            ],
+        },
+    }
+    assert builder.validate_prerequisites(definitions) == []
+
+    builder.character.skill_ranks["skill.ride"] = 0
+    issues = builder.validate_prerequisites(definitions)
+    assert len(issues) == 1
+    assert "Ride 1 rank" in issues[0].message
+
+    definitions["feat.mounted-combat"]["prerequisites"] = [
+        {"rule": "unsupported", "description": "Wild shape ability"}
+    ]
+    issues = builder.validate_prerequisites(definitions)
+    assert any("Wild shape ability" in issue.message for issue in issues)
+
+
+def test_creation_workflow_uses_package_flow_for_initial_and_new_rulesets() -> None:
+    for package_id in ("dnd35-core", "dark-heresy-core"):
+        package = json.loads(
+            (Path("content") / package_id / "package.json").read_text()
+        )
+        workflow = CreationWorkflow(
+            character_id=f"character-{package_id}",
+            name="Test",
+            ruleset_id=package_id,
+            ruleset_definitions=package["definitions"],
+            creation_flow=package["creation_flow"],
+            package_versions={package_id: package["version"]},
+        )
+        assert workflow.steps == [
+            step["id"] for step in package["creation_flow"]["steps"]
+        ]
+        assert workflow.current_step == package["creation_flow"]["steps"][0]["id"]
+
+    custom_workflow = CreationWorkflow(
+        character_id="character-custom",
+        name="Test",
+        ruleset_id="custom-rpg",
+        creation_flow={
+            "steps": [
+                {"id": "origin", "label": "Origin", "fields": []},
+                {"id": "attributes", "label": "Attributes", "fields": []},
+            ]
+        },
+        package_versions={"custom-rpg": "3.2.1"},
+    )
+    assert custom_workflow.current_step == "origin"
+    assert custom_workflow.advance_step() == "attributes"
+    assert custom_workflow.builder.character.package_versions == {
+        "custom-rpg": "3.2.1"
+    }
+
+
+def test_package_fields_update_validate_and_finalize_character() -> None:
+    package = json.loads(
+        (Path("content/dnd35-core/package.json")).read_text()
+    )
+    workflow = CreationWorkflow(
+        character_id="character-fields",
+        name="Draft",
+        ruleset_id=package["id"],
+        ruleset_definitions=package["definitions"],
+        creation_flow=package["creation_flow"],
+        package_versions={package["id"]: package["version"]},
+    )
+    for attribute in (
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+    ):
+        workflow.set_field(attribute, 12)
+    workflow.set_field("race", "race.human")
+    workflow.set_field("class", "class.fighter")
+    workflow.set_field(
+        "skills",
+        [
+            {"skill_id": "skill.climb", "ranks": 4},
+            {"skill_id": "skill.jump", "ranks": 4},
+            {"skill_id": "skill.ride", "ranks": 4},
+            {"skill_id": "skill.swim", "ranks": 4},
+        ],
+    )
+    assert workflow.validate() == []
+    character = workflow.finalize()
+    assert character.abilities["strength"] == 12
+    assert character.choices == {
+        "race": ["race.human"],
+        "class": ["class.fighter"],
+        "skills": ["skill.climb", "skill.jump", "skill.ride", "skill.swim"],
+    }
+    assert character.skill_ranks == {
+        "skill.climb": 4,
+        "skill.jump": 4,
+        "skill.ride": 4,
+        "skill.swim": 4,
+    }
+    assert character.provenance["abilities"]["strength"] == "user"
+    assert character.provenance["choices"]["race"] == "user"
+
+    try:
+        workflow.set_field("strength", 99)
+    except ValueError as error:
+        assert "at most 18" in str(error)
+    else:
+        raise AssertionError("expected ability range validation error")
+
+    try:
+        workflow.set_field("race", "class.fighter")
+    except ValueError as error:
+        assert "not an available race choice" in str(error)
+    else:
+        raise AssertionError("expected choice definition validation error")
+
+
+def test_final_review_reports_prerequisites_provenance_and_package_versions() -> None:
+    package = json.loads(Path("content/dnd35-core/package.json").read_text())
+    workflow = CreationWorkflow(
+        character_id="character-review",
+        name="Review",
+        ruleset_id=package["id"],
+        ruleset_definitions=package["definitions"],
+        policy="strict",
+        creation_flow=package["creation_flow"],
+        package_versions={package["id"]: package["version"]},
+    )
+    for attribute in (
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+    ):
+        workflow.set_field(attribute, 10)
+    workflow.set_field("race", "race.human")
+    workflow.set_field("class", "class.fighter")
+    workflow.set_field(
+        "skills",
+        [
+            {"skill_id": "skill.climb", "ranks": 4},
+            {"skill_id": "skill.jump", "ranks": 4},
+            {"skill_id": "skill.ride", "ranks": 4},
+        ],
+    )
+    workflow.set_field("feats", ["feat.power-attack"])
+
+    report = workflow.review()
+    assert report["can_finalize"] is False
+    assert any(issue["code"] == "unmet-prerequisite" for issue in report["issues"])
+    assert report["package_versions"] == {"dnd35-core": "1.0.0"}
+    assert report["provenance"]["choices"]["race"] == "user"
+    assert "strength_modifier" in report["derived"]
+
+    workflow.set_field("strength", 16)
+    report = workflow.review()
+    assert report["can_finalize"] is True
+    character = workflow.finalize()
+    assert character.abilities["strength"] == 16

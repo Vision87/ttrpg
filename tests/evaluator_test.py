@@ -67,3 +67,35 @@ def test_dynamic_system_stat_evaluation() -> None:
     assert dh_char.derived["wounds"]["value"] == 14
     assert dh_char.derived["toughness_bonus"]["value"] == 4
 
+
+def test_unsupported_stat_formula_is_actionable() -> None:
+    from rules.stat_evaluator import StatEvaluationError, evaluate_stats
+
+    try:
+        evaluate_stats(
+            {"might": 12},
+            {"ability.might": {
+                "id": "ability.might",
+                "type": "ability",
+                "modifier_formula": "score ** 2",
+            }},
+            system_hint="custom",
+        )
+    except StatEvaluationError as error:
+        assert "Unsupported modifier formula" in str(error)
+        assert "ability.might" in str(error)
+    else:
+        raise AssertionError("expected unsupported formula error")
+
+
+def test_custom_ruleset_does_not_receive_d20_default_stats() -> None:
+    from character.model import Character
+
+    character = Character(
+        "custom-1",
+        "Custom",
+        {"custom-rpg": "1.0.0"},
+        {"strength": 16, "dexterity": 14, "constitution": 12},
+    )
+    character.recalculate()
+    assert character.derived == {}

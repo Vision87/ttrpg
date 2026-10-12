@@ -3,6 +3,74 @@
   "version": "1.0.0",
   "dice_model": "d100_roll_under",
   "dependencies": {},
+  "creation_flow": {
+    "steps": [
+      {
+        "id": "characteristics",
+        "label": "Characteristics",
+        "fields": [
+          {"id": "weapon_skill", "label": "Weapon Skill", "type": "number", "attribute": "weapon_skill", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "ballistic_skill", "label": "Ballistic Skill", "type": "number", "attribute": "ballistic_skill", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "strength", "label": "Strength", "type": "number", "attribute": "strength", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "toughness", "label": "Toughness", "type": "number", "attribute": "toughness", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "agility", "label": "Agility", "type": "number", "attribute": "agility", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "intelligence", "label": "Intelligence", "type": "number", "attribute": "intelligence", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "perception", "label": "Perception", "type": "number", "attribute": "perception", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "willpower", "label": "Willpower", "type": "number", "attribute": "willpower", "minimum": 1, "maximum": 100, "required": true},
+          {"id": "fellowship", "label": "Fellowship", "type": "number", "attribute": "fellowship", "minimum": 1, "maximum": 100, "required": true}
+        ]
+      },
+      {
+        "id": "homeworld",
+        "label": "Homeworld",
+        "fields": [{"id": "homeworld", "label": "Homeworld", "type": "choice", "category": "homeworld", "definition_type": "homeworld", "required": true}]
+      },
+      {
+        "id": "career",
+        "label": "Career",
+        "fields": [{"id": "career", "label": "Career", "type": "choice", "category": "career", "definition_type": "career", "required": true}]
+      },
+      {
+        "id": "skills",
+        "label": "Skills",
+        "fields": [{"id": "skills", "label": "Skills", "type": "choice", "category": "skills", "definition_type": "skill", "multiple": true, "skill_selection": "trained"}]
+      },
+      {
+        "id": "talents",
+        "label": "Talents",
+        "fields": [{"id": "talents", "label": "Talents", "type": "choice", "category": "talents", "definition_type": "talent", "multiple": true}]
+      },
+      {
+        "id": "equipment",
+        "label": "Equipment",
+        "fields": [{"id": "equipment", "label": "Equipment", "type": "choice", "category": "equipment", "definition_type": "item", "multiple": true}]
+      },
+      {
+        "id": "appearance",
+        "label": "Appearance",
+        "fields": [
+          {"id": "portrait", "label": "Portrait", "type": "presentation", "slot": "portrait"},
+          {"id": "token", "label": "Token", "type": "presentation", "slot": "token"},
+          {"id": "model", "label": "3D Model", "type": "presentation", "slot": "model"},
+          {"id": "scale", "label": "Scale", "type": "presentation", "slot": "scale"}
+        ]
+      }
+    ],
+    "validation_rules": ["prerequisites", "equipment", "presentation"]
+  },
+  "theme": {
+    "assets": {
+      "display_font": "theme.medievalsharp@1"
+    },
+    "tokens": {
+      "background": "#151416",
+      "surface": "#252328",
+      "primary": "#6B2028",
+      "secondary": "#3C3035",
+      "accent": "#A7463D",
+      "text": "#E5DAD7"
+    }
+  },
   "definitions": {
     "characteristic.weapon_skill": {"id": "characteristic.weapon_skill", "type": "characteristic", "abbreviation": "WS"},
     "characteristic.ballistic_skill": {"id": "characteristic.ballistic_skill", "type": "characteristic", "abbreviation": "BS"},
@@ -40,9 +108,48 @@
       "primary_characteristics": ["WP", "Int"],
       "starting_wounds_formula": "8 + 1d5"
     },
-    "skill.awareness": {"id": "skill.awareness", "type": "skill", "characteristic": "characteristic.perception"},
-    "skill.dodge": {"id": "skill.dodge", "type": "skill", "characteristic": "characteristic.agility"},
-    "skill.inquiry": {"id": "skill.inquiry", "type": "skill", "characteristic": "characteristic.fellowship"},
+    "skill.acrobatics": {"id": "skill.acrobatics", "type": "skill", "name": "Acrobatics", "characteristic": "characteristic.agility", "trained_only": true},
+    "skill.animal_care": {"id": "skill.animal_care", "type": "skill", "name": "Animal Care", "characteristic": "characteristic.intelligence"},
+    "skill.awareness": {"id": "skill.awareness", "type": "skill", "name": "Awareness", "characteristic": "characteristic.perception"},
+    "skill.barter": {"id": "skill.barter", "type": "skill", "name": "Barter", "characteristic": "characteristic.fellowship"},
+    "skill.charm": {"id": "skill.charm", "type": "skill", "name": "Charm", "characteristic": "characteristic.fellowship"},
+    "skill.chem_use": {"id": "skill.chem_use", "type": "skill", "name": "Chem-Use", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.climb": {"id": "skill.climb", "type": "skill", "name": "Climb", "characteristic": "characteristic.strength"},
+    "skill.command": {"id": "skill.command", "type": "skill", "name": "Command", "characteristic": "characteristic.fellowship", "trained_only": true},
+    "skill.common_lore": {"id": "skill.common_lore", "type": "skill", "name": "Common Lore (specialty)", "characteristic": "characteristic.intelligence"},
+    "skill.concealment": {"id": "skill.concealment", "type": "skill", "name": "Concealment", "characteristic": "characteristic.agility"},
+    "skill.contortionist": {"id": "skill.contortionist", "type": "skill", "name": "Contortionist", "characteristic": "characteristic.agility", "trained_only": true},
+    "skill.deceive": {"id": "skill.deceive", "type": "skill", "name": "Deceive", "characteristic": "characteristic.fellowship"},
+    "skill.demolition": {"id": "skill.demolition", "type": "skill", "name": "Demolition", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.disguise": {"id": "skill.disguise", "type": "skill", "name": "Disguise", "characteristic": "characteristic.fellowship", "trained_only": true},
+    "skill.dodge": {"id": "skill.dodge", "type": "skill", "name": "Dodge", "characteristic": "characteristic.agility"},
+    "skill.drive": {"id": "skill.drive", "type": "skill", "name": "Drive", "characteristic": "characteristic.agility"},
+    "skill.evaluate": {"id": "skill.evaluate", "type": "skill", "name": "Evaluate", "characteristic": "characteristic.intelligence"},
+    "skill.forbidden_lore": {"id": "skill.forbidden_lore", "type": "skill", "name": "Forbidden Lore (specialty)", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.gamble": {"id": "skill.gamble", "type": "skill", "name": "Gamble", "characteristic": "characteristic.intelligence"},
+    "skill.inquiry": {"id": "skill.inquiry", "type": "skill", "name": "Inquiry", "characteristic": "characteristic.fellowship"},
+    "skill.intimidate": {"id": "skill.intimidate", "type": "skill", "name": "Intimidate", "characteristic": "characteristic.strength"},
+    "skill.invocation": {"id": "skill.invocation", "type": "skill", "name": "Invocation", "characteristic": "characteristic.willpower", "trained_only": true},
+    "skill.lip_reading": {"id": "skill.lip_reading", "type": "skill", "name": "Lip Reading", "characteristic": "characteristic.perception", "trained_only": true},
+    "skill.literacy": {"id": "skill.literacy", "type": "skill", "name": "Literacy", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.logic": {"id": "skill.logic", "type": "skill", "name": "Logic", "characteristic": "characteristic.intelligence"},
+    "skill.medicae": {"id": "skill.medicae", "type": "skill", "name": "Medicae", "characteristic": "characteristic.intelligence"},
+    "skill.navigation": {"id": "skill.navigation", "type": "skill", "name": "Navigation (specialty)", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.performer": {"id": "skill.performer", "type": "skill", "name": "Performer (specialty)", "characteristic": "characteristic.fellowship", "trained_only": true},
+    "skill.pilot": {"id": "skill.pilot", "type": "skill", "name": "Pilot (specialty)", "characteristic": "characteristic.agility", "trained_only": true},
+    "skill.psyniscience": {"id": "skill.psyniscience", "type": "skill", "name": "Psyniscience", "characteristic": "characteristic.perception", "trained_only": true},
+    "skill.scholastic_lore": {"id": "skill.scholastic_lore", "type": "skill", "name": "Scholastic Lore (specialty)", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.scrutiny": {"id": "skill.scrutiny", "type": "skill", "name": "Scrutiny", "characteristic": "characteristic.perception"},
+    "skill.search": {"id": "skill.search", "type": "skill", "name": "Search", "characteristic": "characteristic.perception"},
+    "skill.security": {"id": "skill.security", "type": "skill", "name": "Security", "characteristic": "characteristic.agility", "trained_only": true},
+    "skill.shadowing": {"id": "skill.shadowing", "type": "skill", "name": "Shadowing", "characteristic": "characteristic.agility", "trained_only": true},
+    "skill.silent_move": {"id": "skill.silent_move", "type": "skill", "name": "Silent Move", "characteristic": "characteristic.agility"},
+    "skill.speak_language": {"id": "skill.speak_language", "type": "skill", "name": "Speak Language (specialty)", "characteristic": "characteristic.intelligence", "trained_only": true},
+    "skill.survival": {"id": "skill.survival", "type": "skill", "name": "Survival", "characteristic": "characteristic.perception", "trained_only": true},
+    "skill.swim": {"id": "skill.swim", "type": "skill", "name": "Swim", "characteristic": "characteristic.strength"},
+    "skill.tech_use": {"id": "skill.tech_use", "type": "skill", "name": "Tech-Use", "characteristic": "characteristic.intelligence"},
+    "skill.tracking": {"id": "skill.tracking", "type": "skill", "name": "Tracking", "characteristic": "characteristic.perception", "trained_only": true},
+    "skill.trade": {"id": "skill.trade", "type": "skill", "name": "Trade (specialty)", "trained_only": true},
     "talent.marksman": {
       "id": "talent.marksman",
       "type": "talent",
@@ -96,10 +203,31 @@
     "template.guardsman-scout": {
       "id": "template.guardsman-scout",
       "type": "template",
+      "name": "Guardsman Scout",
       "homeworld": "homeworld.hive_world",
       "career": "career.guardsman",
       "talents": ["talent.marksman"],
-      "equipment": ["item.lasgun", "item.flak_jacket"]
+      "equipment": ["item.lasgun", "item.flak_jacket"],
+      "creation_defaults": {
+        "abilities": {
+          "weapon_skill": 30,
+          "ballistic_skill": 40,
+          "strength": 30,
+          "toughness": 35,
+          "agility": 35,
+          "intelligence": 30,
+          "perception": 30,
+          "willpower": 30,
+          "fellowship": 25
+        },
+        "choices": {
+          "homeworld": ["homeworld.hive_world"],
+          "career": ["career.guardsman"],
+          "talents": ["talent.marksman"],
+          "equipment": ["item.lasgun", "item.flak_jacket"]
+        },
+        "presentation": {"token": "token:guardsman"}
+      }
     }
   },
   "operations": []

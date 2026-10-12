@@ -16,6 +16,7 @@ class CharacterTemplate:
     package_versions: dict[str, str]
     defaults: dict[str, Any]
     recommendations: dict[str, Any]
+    ruleset_id: str | None = None
 
     def apply(self, character_id: str, name: str) -> Character:
         values = deepcopy(self.defaults)
@@ -25,8 +26,15 @@ class CharacterTemplate:
             package_versions=deepcopy(self.package_versions),
             abilities=values.pop("abilities", {}),
             choices=values.pop("choices", {}),
+            skill_ranks=values.pop("skill_ranks", {}),
             presentation=values.pop("presentation", {}),
+            ruleset_id=self.ruleset_id,
         )
+        character.provenance = {
+            "abilities": {key: "template" for key in character.abilities},
+            "choices": {key: "template" for key in character.choices},
+            "skills": {key: "template" for key in character.skill_ranks},
+        }
         character.recalculate()
         return character
 
@@ -43,6 +51,7 @@ def save_personal_template(
         defaults={
             "abilities": deepcopy(character.abilities),
             "choices": deepcopy(character.choices),
+            "skill_ranks": deepcopy(character.skill_ranks),
             "presentation": deepcopy(character.presentation),
         },
         recommendations={},

@@ -1,0 +1,20 @@
+-------------------------------------------------------------------------------
+Build Report - Content Size Statistics
+Note: this shows uncompressed sizes.  Actual sizes may be smaller because of Unity Archive compression.
+Serialized File count                      4
+Resource file count                        0
+Object count                             166
+Serialized Files                       3.3 mb	 100.0%
+Serialized Files Headers               6.1 kb	   0.2%
+Resource data (Texture,Audio...)       0.0 bytes	   0.0%
+Total build size                       3.3 mb
+
+Largest Types:
+     2.7 mb	  80.3% Texture2D
+   512.2 kb	  15.1% Cubemap
+   122.6 kb	   3.6% TextRendering::Font
+
+Largest Assets:
+   519.8 kb	  15.3% Resources/unity_builtin_extra
+   122.9 kb	   3.6% Assets/Resources/theme.cinzel.ttf
+-------------------------------------------------------------------------------

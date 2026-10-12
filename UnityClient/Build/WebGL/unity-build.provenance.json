@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "generator": {
     "name": "unity-cli",
-    "version": "1.0.0-beta.8"
+    "version": "1.0.0-beta.12"
   },
   "outcome": "success",
   "exitCode": 0,
-  "startedAt": "2026-09-21T19:37:06.419Z",
-  "endedAt": "2026-09-21T19:39:24.245Z",
+  "startedAt": "2026-10-12T06:18:37.089Z",
+  "endedAt": "2026-10-12T06:19:42.030Z",
   "editor": {
     "version": "6000.6.2f1",
     "changeset": "770e33f6875c",
@@ -17,7 +17,12 @@
     "target": "WebGL",
     "executeMethod": "WebGLBuild.Build",
     "outputPath": "Build/WebGL",
-    "logFile": "Logs/build-WebGL-1790019426377.log"
+    "logFile": "Logs/build-WebGL-1791785916889.log"
+  },
+  "source": {
+    "vcs": "git",
+    "revision": "9358005e999dd8e9f8cadeaf2a0db7ff241b9927",
+    "dirty": true
   },
   "packages": {
     "source": "packages-lock.json",
@@ -29,7 +34,8 @@
       "com.unity.modules.physics": "1.0.0",
       "com.unity.modules.physics2d": "1.0.0",
       "com.unity.modules.physicscore2d": "1.0.0",
-      "com.unity.modules.ui": "1.0.0"
+      "com.unity.modules.ui": "1.0.0",
+      "com.unity.modules.unitywebrequest": "1.0.0"
     }
   }
 }

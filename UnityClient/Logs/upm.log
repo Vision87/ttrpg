@@ -1,0 +1,13 @@
+[2026-10-12T06:18:37.702Z][INFO] Command-line: /Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Helpers/PackageManager/Server/UnityPackageManager server -s 69640 --ipc-path /tmp/Unity-Upm-69640.sock -l 2 --log-file /Users/vision/Documents/src/experiment/UnityClient/Logs/upm.log
+[2026-10-12T06:18:37.705Z][INFO] Detected environment variables:
+  GIT_ASKPASS=
+  GIT_TERMINAL_PROMPT=0
+[2026-10-12T06:18:37.727Z][INFO] IPC server started (IPC path=/tmp/Unity-Upm-69640.sock).
+[2026-10-12T06:18:37.727Z][INFO] Hint: To connect to this UPM instance, launch Unity with the command-line parameter -upmIpcPath Upm-69640.
+[2026-10-12T06:18:39.422Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-12T06:18:39.502Z][INFO] project:list-packages --> 200 (80 ms)
+[2026-10-12T06:18:42.702Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-12T06:18:42.727Z][INFO] project:list-packages --> 200 (25 ms)
+[2026-10-12T06:19:41.989Z][INFO] Received shutdown request (SIGTERM), shutting down Unity Package Manager

@@ -19,9 +19,19 @@ class Character:
     overrides: list[dict[str, Any]] = field(default_factory=list)
     presentation: dict[str, Any] = field(default_factory=dict)
     derived: dict[str, dict[str, Any]] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+    ruleset_id: str | None = None
+    skill_ranks: dict[str, float] = field(default_factory=dict)
 
     def recalculate(self, ruleset_definitions: dict[str, dict[str, Any]] | None = None) -> None:
-        system_hint = "dark_heresy" if "dark-heresy-core" in self.package_versions else "dnd35"
+        package_ids = set(self.package_versions)
+        system_hint = (
+            "dark_heresy"
+            if "dark-heresy-core" in package_ids
+            else "dnd35"
+            if "dnd35-core" in package_ids
+            else "custom"
+        )
         self.derived = evaluate_stats(
             self.abilities,
             ruleset_definitions=ruleset_definitions,
@@ -35,7 +45,13 @@ class Character:
             "package_versions": dict(self.package_versions),
             "abilities": dict(self.abilities),
             "choices": {key: list(value) for key, value in self.choices.items()},
+            "skill_ranks": dict(self.skill_ranks),
             "overrides": list(self.overrides),
             "presentation": dict(self.presentation),
             "derived": dict(self.derived),
+            "provenance": {
+                key: dict(value) if isinstance(value, dict) else value
+                for key, value in self.provenance.items()
+            },
+            "ruleset_id": self.ruleset_id,
         }

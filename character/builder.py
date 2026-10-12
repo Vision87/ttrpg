@@ -61,10 +61,12 @@ class CharacterBuilder:
 
     def set_ability(self, ability: str, value: int) -> None:
         self.character.abilities[ability] = value
+        self.character.provenance.setdefault("abilities", {})[ability] = "user"
         self.character.recalculate()
 
     def choose(self, category: str, definition_id: str) -> None:
         self.character.choices.setdefault(category, []).append(definition_id)
+        self.character.provenance.setdefault("choices", {})[category] = "user"
 
     def add_override(self, path: str, message: str) -> None:
         self.character.overrides.append({"path": path, "message": message})
@@ -98,12 +100,34 @@ class CharacterBuilder:
                 for req in def_data.get("prerequisites", []):
                     rule = req.get("rule")
                     min_val = req.get("minimum", 0)
-                    actual_val = self.character.abilities.get(rule, 0)
-                    if actual_val < min_val:
+                    description = req.get("description")
+                    if rule in self.character.abilities:
+                        actual_val = self.character.abilities[rule]
+                        satisfied = actual_val >= min_val
+                        requirement = (
+                            f"{rule} >= {min_val} (current: {actual_val})"
+                        )
+                    elif rule == "feat":
+                        definition_id = req.get("definition_id")
+                        satisfied = definition_id in self.character.choices.get(
+                            "feats", []
+                        )
+                        requirement = description or definition_id or "required feat"
+                    elif rule == "skill":
+                        skill_id = req.get("skill_id")
+                        actual_val = self.character.skill_ranks.get(skill_id, 0)
+                        satisfied = actual_val >= min_val
+                        requirement = description or (
+                            f"{skill_id} {min_val} rank(s) (current: {actual_val})"
+                        )
+                    else:
+                        satisfied = False
+                        requirement = description or str(rule or "unknown prerequisite")
+                    if not satisfied:
                         issue = self.explain_prerequisite(
                             path=f"choices.{category}.{choice_id}",
                             satisfied=False,
-                            message=f"{choice_id} requires {rule} >= {min_val} (current: {actual_val})",
+                            message=f"{def_data.get('name', choice_id)} requires {requirement}",
                         )
                         if issue:
                             issues.append(issue)
