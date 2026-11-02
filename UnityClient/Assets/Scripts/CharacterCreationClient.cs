@@ -59,8 +59,17 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private TacticalProjection tacticalProjection;
     private ImmersiveProjection immersiveProjection;
     private Vector2 scrollPosition;
+    private Vector2 bodyScrollPosition;
+    private string bodyScrollStepId = "";
     private Vector2 featListScrollPosition;
-    private Vector2 featDetailScrollPosition;
+    private string selectedShopItemId = "";
+    private string hoveredShopItemId = "";
+    private Vector2 shopListScrollPosition;
+    private Vector2 backpackScrollPosition;
+    private Texture2D fallbackItemTexture;
+    [SerializeField]
+    private StepSummaryData stepSummaryData;
+    private StepSummaryHeader stepSummaryHeader;
 
     private enum FeatRequirementState
     {
@@ -86,6 +95,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private void Start()
     {
         apiBaseUrl = ResolveApiBaseUrl();
+        stepSummaryHeader = gameObject.AddComponent<StepSummaryHeader>();
+        if (stepSummaryData != null && stepSummaryData.stepTitles != null)
+        {
+            stepSummaryHeader.UpdateSteps(
+                new List<string>(stepSummaryData.stepTitles));
+        }
         StartCoroutine(LoadRulesets());
     }
 
@@ -123,6 +138,21 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         LoadThemeAssets();
         ApplyThemeStyles();
+        CreationIcons.EnsureLoaded();
+        if (screen != ClientScreen.Board)
+        {
+            CreationUiStyles.Configure(
+                themeFont,
+                defaultSkin != null ? defaultSkin.font : null,
+                ThemeColor("accent", new Color(0.82f, 0.62f, 0.30f)),
+                ThemeColor("text", new Color(0.94f, 0.89f, 0.78f)),
+                ThemeColor("background", new Color(0.08f, 0.065f, 0.055f)),
+                ThemeColor("surface", new Color(0.15f, 0.12f, 0.095f)),
+                themeControl,
+                themeControlHover,
+                themeControlActive);
+            CreationUiStyles.Ensure();
+        }
         if (screen != ClientScreen.Board)
         {
             DrawCreationSurfaces();
@@ -132,68 +162,97 @@ public sealed class CharacterCreationClient : MonoBehaviour
             DrawBoardFrame();
             GUILayout.BeginArea(new Rect(12, 12, 340, 150));
         }
-        scrollPosition = GUILayout.BeginScrollView(scrollPosition);
-        if (themeLogo != null)
-        {
-            GUILayout.Label(themeLogo, GUILayout.Width(80), GUILayout.Height(80));
-        }
-        GUILayout.Label("Universal RPG Board", TitleStyle());
-        if (!string.IsNullOrEmpty(errorMessage))
-        {
-            GUILayout.Label(errorMessage, ErrorStyle());
-        }
 
-        if (requestInProgress)
+        if (screen == ClientScreen.Editing && !requestInProgress)
         {
-            GUILayout.Label("Connecting to local game service...");
+            DrawEditingShell();
         }
         else
         {
-            switch (screen)
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition);
+            DrawBrandHeader(forceShowLogo: true);
+            if (!string.IsNullOrEmpty(errorMessage))
             {
-                case ClientScreen.Loading:
-                    GUILayout.Label("Loading installed rulesets...");
-                    break;
-                case ClientScreen.Rulesets:
-                    DrawRulesets();
-                    break;
-                case ClientScreen.Templates:
-                    DrawTemplateSelection();
-                    break;
-                case ClientScreen.Drafts:
-                    DrawDraftList();
-                    break;
-                case ClientScreen.Editing:
-                    DrawCreationStep();
-                    break;
-                case ClientScreen.Review:
-                    DrawReview();
-                    break;
-                case ClientScreen.Board:
-                    DrawBoardStatus();
-                    break;
+                GUILayout.Label(errorMessage, ErrorStyle());
             }
+
+            if (requestInProgress)
+            {
+                GUILayout.Label("Connecting to local game service...", CreationUiStyles.Status);
+            }
+            else
+            {
+                switch (screen)
+                {
+                    case ClientScreen.Loading:
+                        GUILayout.Label("Loading installed rulesets...", CreationUiStyles.Status);
+                        break;
+                    case ClientScreen.Rulesets:
+                        DrawRulesets();
+                        break;
+                    case ClientScreen.Templates:
+                        DrawTemplateSelection();
+                        break;
+                    case ClientScreen.Drafts:
+                        DrawDraftList();
+                        break;
+                    case ClientScreen.Review:
+                        DrawReview();
+                        break;
+                    case ClientScreen.Board:
+                        DrawBoardStatus();
+                        break;
+                }
+            }
+            GUILayout.EndScrollView();
         }
-        GUILayout.EndScrollView();
         GUILayout.EndArea();
         RestoreThemeColors();
     }
 
+    private void DrawBrandHeader(bool forceShowLogo)
+    {
+        UiLayout.Density density = UiLayout.CurrentDensity;
+        bool showLogo = forceShowLogo || density.ShowLogo;
+        if (showLogo && themeLogo != null)
+        {
+            float size = forceShowLogo && density.LogoSize <= 0f ? 64f : Mathf.Max(40f, density.LogoSize);
+            if (forceShowLogo && screen == ClientScreen.Rulesets)
+            {
+                size = Mathf.Max(size, 64f);
+            }
+            GUILayout.Label(themeLogo, GUILayout.Width(size), GUILayout.Height(size));
+        }
+        GUILayout.Label("Universal RPG Board", CreationUiStyles.Title);
+    }
+
+    private void DrawEditingShell()
+    {
+        DrawBrandHeader(forceShowLogo: false);
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            GUILayout.Label(errorMessage, ErrorStyle());
+        }
+        DrawCreationStep();
+    }
+
     private void DrawRulesets()
     {
-        GUILayout.Label("Choose a role-playing game");
+        GUILayout.Label("Choose a role-playing game", CreationUiStyles.Title);
         foreach (var ruleset in rulesets)
         {
-            if (GUILayout.Button(ruleset.name + " (" + ruleset.id + ")"))
+            if (CreationUiStyles.PrimaryButton(ruleset.name + " (" + ruleset.id + ")"))
             {
                 selectedRuleset = ruleset;
                 activeTheme = ruleset.theme;
                 errorMessage = "";
                 StartCoroutine(LoadFlow(ruleset.id));
             }
+            GUILayout.Space(UiLayout.CurrentDensity.Spacing);
         }
         GUILayout.Space(16);
-        if (GUILayout.Button("Resume a saved draft"))
+        if (CreationUiStyles.SecondaryButton(
+            CreationIcons.ActionContent(CreationIcons.Save, "Resume a saved draft")))
         {
             StartCoroutine(LoadDraftList());
         }
@@ -223,23 +282,25 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawTemplateSelection()
     {
-        GUILayout.Label("Create a " + selectedRuleset.name + " character");
-        characterName = GUILayout.TextField(characterName);
+        GUILayout.Label("Create a " + selectedRuleset.name + " character", CreationUiStyles.Title);
+        characterName = GUILayout.TextField(characterName, CreationUiStyles.Input);
         GUILayout.Space(8);
-        GUILayout.Label("Choose a starting point");
-        if (GUILayout.Button("Start from scratch"))
+        GUILayout.Label("Choose a starting point", CreationUiStyles.Section);
+        if (CreationUiStyles.PrimaryButton("Start from scratch"))
         {
             StartCoroutine(CreateDraft(""));
         }
 
         foreach (var template in flow.templates ?? new CharacterTemplateOptionDto[0])
         {
-            if (GUILayout.Button("Use template: " + template.name))
+            GUILayout.Space(UiLayout.CurrentDensity.Spacing);
+            if (CreationUiStyles.SecondaryButton("Use template: " + template.name))
             {
                 StartCoroutine(CreateDraft(template.id));
             }
         }
-        if (GUILayout.Button("Back to rulesets"))
+        GUILayout.Space(12);
+        if (CreationUiStyles.TertiaryButton("Back to rulesets"))
         {
             screen = ClientScreen.Rulesets;
         }
@@ -293,19 +354,20 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawDraftList()
     {
-        GUILayout.Label("Saved drafts");
+        GUILayout.Label("Saved drafts", CreationUiStyles.Title);
         if (savedDrafts.Length == 0)
         {
-            GUILayout.Label("No saved drafts yet.");
+            GUILayout.Label("No saved drafts yet.", CreationUiStyles.Body);
         }
         foreach (var saved in savedDrafts)
         {
-            if (GUILayout.Button(saved.name + " - " + saved.ruleset_id))
+            if (CreationUiStyles.SecondaryButton(
+                saved.name + " - " + saved.ruleset_id))
             {
                 StartCoroutine(ResumeDraft(saved.id, saved.ruleset_id));
             }
         }
-        if (GUILayout.Button("Back"))
+        if (CreationUiStyles.TertiaryButton("Back"))
         {
             screen = ClientScreen.Rulesets;
         }
@@ -375,6 +437,13 @@ public sealed class CharacterCreationClient : MonoBehaviour
             serverFieldValues[fieldValue.field_id] = fieldValue;
             if (preserveLocalValues)
             {
+                if (!selectedValues.ContainsKey(fieldValue.field_id) &&
+                    fieldValue.selected_values != null &&
+                    fieldValue.selected_values.Length > 0)
+                {
+                    selectedValues[fieldValue.field_id] =
+                        new HashSet<string>(fieldValue.selected_values);
+                }
                 continue;
             }
             if (fieldValue.is_number)
@@ -405,8 +474,10 @@ public sealed class CharacterCreationClient : MonoBehaviour
         int stepIndex = FindStepIndex(draft.current_step);
         if (stepIndex < 0 || stepIndex >= flow.creation_flow.steps.Length)
         {
-            GUILayout.Label("The saved draft references an unavailable creation step.");
-            if (GUILayout.Button("Back to rulesets"))
+            GUILayout.Label(
+                "The saved draft references an unavailable creation step.",
+                CreationUiStyles.Body);
+            if (CreationUiStyles.TertiaryButton("Back to rulesets"))
             {
                 screen = ClientScreen.Rulesets;
             }
@@ -414,25 +485,78 @@ public sealed class CharacterCreationClient : MonoBehaviour
         }
 
         var step = flow.creation_flow.steps[stepIndex];
-        GUILayout.Label(step.label, TitleStyle());
-        GUILayout.Label(
-            "Step " + (stepIndex + 1) + " of " + flow.creation_flow.steps.Length);
+        if (bodyScrollStepId != step.id)
+        {
+            bodyScrollStepId = step.id;
+            bodyScrollPosition = Vector2.zero;
+        }
+
+        if (stepSummaryHeader == null)
+        {
+            stepSummaryHeader = GetComponent<StepSummaryHeader>() ?? gameObject.AddComponent<StepSummaryHeader>();
+        }
+
+        Color accentColor = new Color(0.84f, 0.68f, 0.40f);
+        Color textColor = Color.white;
+        if (activeTheme != null && activeTheme.tokens != null)
+        {
+            if (ColorUtility.TryParseHtmlString(activeTheme.tokens.accent, out var parsedAccent))
+            {
+                accentColor = parsedAccent;
+            }
+            if (ColorUtility.TryParseHtmlString(activeTheme.tokens.text, out var parsedText))
+            {
+                textColor = parsedText;
+            }
+        }
+
+        var progressItems = BuildStepProgress(stepIndex);
+        stepSummaryHeader.UpdateProgress(progressItems, accentColor, textColor);
+        int requestedFromSummary = stepSummaryHeader.DrawHeader();
+        if (requestedFromSummary >= 0 && requestedFromSummary != stepIndex)
+        {
+            StartCoroutine(SaveStepAndNavigate(stepIndex, requestedFromSummary));
+            return;
+        }
+
+        GUILayout.Label(step.label, CreationUiStyles.Title);
+        GUILayout.BeginVertical(GUI.skin.box);
+        string primaryAction = stepIndex + 1 < flow.creation_flow.steps.Length
+            ? "Save and continue"
+            : "Review character";
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        if (CreationUiStyles.PrimaryButton(
+            CreationIcons.ActionContent(CreationIcons.Continue, primaryAction)))
+        {
+            StartCoroutine(SaveStepAndContinue(stepIndex));
+        }
+        GUI.enabled = previousEnabled && !requestInProgress;
+        if (CreationUiStyles.TertiaryButton(
+            CreationIcons.ActionContent(CreationIcons.Save, "Save draft and exit"),
+            GUILayout.ExpandWidth(true)))
+        {
+            StartCoroutine(SaveStepAndExit(stepIndex));
+        }
+        GUI.enabled = previousEnabled;
+        DrawScoreGroups(step);
+        GUILayout.EndVertical();
+        CreationUiStyles.DrawDivider();
+
+        float bodyHeight = UiLayout.BodyListHeight(
+            0.9f,
+            120f,
+            Screen.height);
+        bodyScrollPosition = GUILayout.BeginScrollView(
+            bodyScrollPosition,
+            false,
+            false,
+            GUILayout.Height(bodyHeight));
         foreach (var field in step.fields)
         {
             DrawField(field);
         }
-        DrawScoreGroups(step);
-        if (GUILayout.Button(
-            stepIndex + 1 < flow.creation_flow.steps.Length
-                ? "Save and continue"
-                : "Review character"))
-        {
-            StartCoroutine(SaveStepAndContinue(stepIndex));
-        }
-        if (GUILayout.Button("Save draft and exit"))
-        {
-            StartCoroutine(SaveStepAndExit(stepIndex));
-        }
+        GUILayout.EndScrollView();
     }
 
     private void DrawScoreGroups(CreationStepDto step)
@@ -446,15 +570,16 @@ public sealed class CharacterCreationClient : MonoBehaviour
             }
 
             bool hasRolled = GroupRollCount(group.id) > 0;
-            GUILayout.Space(8);
             if (hasRolled && !group.allow_reroll)
             {
                 continue;
             }
+            GUILayout.Space(8);
             string label = hasRolled
                 ? "Reroll All Ability Scores"
                 : "Roll All Ability Scores";
-            if (GUILayout.Button(label))
+            if (CreationUiStyles.TertiaryButton(
+                CreationIcons.ActionContent(CreationIcons.Ability, label)))
             {
                 StartCoroutine(RollGroup(group.id));
             }
@@ -518,50 +643,268 @@ public sealed class CharacterCreationClient : MonoBehaviour
         return -1;
     }
 
+    private List<StepSummaryHeader.StepSummaryItem> BuildStepProgress(int currentStepIndex)
+    {
+        var items = new List<StepSummaryHeader.StepSummaryItem>();
+        if (flow == null || flow.creation_flow == null || flow.creation_flow.steps == null)
+        {
+            return items;
+        }
+
+        for (int i = 0; i < flow.creation_flow.steps.Length; i++)
+        {
+            var step = flow.creation_flow.steps[i];
+            bool isCurrent = i == currentStepIndex;
+            bool isPast = i < currentStepIndex;
+            string summary = GetStepSummaryText(step);
+            bool hasSelection = !string.IsNullOrEmpty(summary);
+
+            items.Add(new StepSummaryHeader.StepSummaryItem
+            {
+                Index = i,
+                Title = step.label,
+                Summary = summary,
+                IsCurrent = isCurrent,
+                IsPast = isPast,
+                HasSelection = hasSelection
+            });
+        }
+        return items;
+    }
+
+    private string GetStepSummaryText(CreationStepDto step)
+    {
+        if (step.fields == null || step.fields.Length == 0)
+        {
+            return "";
+        }
+
+        // 1. Check number fields (Ability Scores / Characteristics)
+        var numParts = new List<string>();
+        foreach (var field in step.fields)
+        {
+            if (field.type == "number")
+            {
+                string val = textValues.ContainsKey(field.id) ? textValues[field.id] : "";
+                if (string.IsNullOrEmpty(val) && serverFieldValues.TryGetValue(field.id, out var sv) && sv.is_number)
+                {
+                    val = sv.number_value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                if (!string.IsNullOrEmpty(val) && val != "0")
+                {
+                    string abbr = field.label.Length > 3 ? field.label.Substring(0, 3).ToUpper() : field.label.ToUpper();
+                    numParts.Add(abbr + " " + val);
+                }
+            }
+        }
+        if (numParts.Count > 0)
+        {
+            return string.Join(" · ", numParts.ToArray());
+        }
+
+        // 2. Check skill allocation
+        foreach (var field in step.fields)
+        {
+            if (field.skill_selection == "ranks")
+            {
+                int count = 0;
+                float totalRanks = 0;
+                foreach (var kvp in skillRankValues)
+                {
+                    if (kvp.Value > 0)
+                    {
+                        count++;
+                        totalRanks += kvp.Value;
+                    }
+                }
+                if (count > 0)
+                {
+                    return count + " skills (" + totalRanks + " ranks)";
+                }
+            }
+            else if (field.skill_selection == "trained")
+            {
+                var selected = GetSelectedValues(field.id);
+                if (selected.Count > 0)
+                {
+                    return selected.Count + " trained skills";
+                }
+            }
+        }
+
+        // 3. Check equipment
+        foreach (var field in step.fields)
+        {
+            if (field.definition_type == "item" || field.category == "equipment")
+            {
+                if (draft != null && draft.equipment_shop != null && draft.equipment_shop.state != null)
+                {
+                    var state = draft.equipment_shop.state;
+                    int itemCount = state.items != null ? state.items.Length : 0;
+                    string wealth = state.remaining_wealth != null ? state.remaining_wealth.ToString() + " gp" : "";
+                    if (itemCount > 0 && !string.IsNullOrEmpty(wealth))
+                    {
+                        return itemCount + " items · " + wealth;
+                    }
+                    if (itemCount > 0) return itemCount + " items";
+                    if (!string.IsNullOrEmpty(wealth)) return wealth;
+                }
+                var selected = GetSelectedValues(field.id);
+                if (selected.Count > 0)
+                {
+                    return selected.Count + " items selected";
+                }
+            }
+        }
+
+        // 4. Check multiple-choice fields (feats, talents)
+        foreach (var field in step.fields)
+        {
+            if (field.type == "choice" && field.multiple)
+            {
+                var selected = GetSelectedValues(field.id);
+                if (selected.Count > 0)
+                {
+                    var labels = new List<string>();
+                    foreach (var optId in selected)
+                    {
+                        labels.Add(FindOptionLabel(field, optId));
+                    }
+                    if (labels.Count <= 2)
+                    {
+                        return string.Join(", ", labels.ToArray());
+                    }
+                    return labels[0] + " (+" + (labels.Count - 1) + " more)";
+                }
+            }
+        }
+
+        // 5. Check single-choice fields (race, class, homeworld, career)
+        foreach (var field in step.fields)
+        {
+            if (field.type == "choice" && !field.multiple)
+            {
+                var selected = GetSelectedValues(field.id);
+                if (selected.Count == 0 && serverFieldValues.TryGetValue(field.id, out var sv) && sv.selected_values != null && sv.selected_values.Length > 0)
+                {
+                    selected = new HashSet<string>(sv.selected_values);
+                }
+                if (selected.Count > 0)
+                {
+                    foreach (var optId in selected)
+                    {
+                        return FindOptionLabel(field, optId);
+                    }
+                }
+            }
+        }
+
+        // 6. Check presentation fields (portrait, token, model, name)
+        foreach (var field in step.fields)
+        {
+            if (field.type == "presentation")
+            {
+                string val = textValues.ContainsKey(field.id) ? textValues[field.id] : "";
+                if (!string.IsNullOrEmpty(val))
+                {
+                    return field.label + " configured";
+                }
+            }
+            if (field.type == "text" && field.id == "name")
+            {
+                string val = textValues.ContainsKey(field.id) ? textValues[field.id] : characterName;
+                if (!string.IsNullOrEmpty(val))
+                {
+                    return val;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    private static string FindOptionLabel(CreationFieldDto field, string optionId)
+    {
+        if (field.options != null)
+        {
+            foreach (var opt in field.options)
+            {
+                if (opt.id == optionId)
+                {
+                    return opt.label;
+                }
+            }
+        }
+        return optionId;
+    }
+
     private void DrawField(CreationFieldDto field)
     {
         GUILayout.Space(6);
-        GUILayout.Label(field.label + (field.required ? " *" : ""));
+        GUILayout.Label(field.label + (field.required ? " *" : ""), CreationUiStyles.FieldLabel);
         if (field.type == "number" ||
             (field.type == "presentation" && field.slot == "scale"))
         {
+            bool individuallyRollable =
+                field.type == "number" && IsIndividuallyRollable(field);
             string value = textValues.ContainsKey(field.id) ? textValues[field.id] : "";
-            textValues[field.id] = GUILayout.TextField(value);
-            GUILayout.Label("Allowed range: " + field.minimum + " - " + field.maximum);
-            if (field.type == "number" && IsIndividuallyRollable(field))
+            if (individuallyRollable)
+            {
+                GUILayout.BeginHorizontal();
+                textValues[field.id] = GUILayout.TextField(
+                    value,
+                    CreationUiStyles.Input,
+                    GUILayout.ExpandWidth(true));
+                var rollValue = serverFieldValues.ContainsKey(field.id)
+                    ? serverFieldValues[field.id]
+                    : null;
+                bool hasRolled = rollValue != null && rollValue.roll_count > 0;
+                string buttonLabel = hasRolled
+                    ? "Reroll " + field.label
+                    : "Roll " + field.label;
+                if (!hasRolled || field.roll.allow_reroll)
+                {
+                    if (CreationUiStyles.IconButton(
+                        CreationIcons.IconContent(CreationIcons.Dice, buttonLabel)))
+                    {
+                        StartCoroutine(RollField(field.id));
+                    }
+                }
+                GUILayout.EndHorizontal();
+            }
+            else
+            {
+                textValues[field.id] = GUILayout.TextField(value, CreationUiStyles.Input);
+            }
+            GUILayout.Label(
+                "Allowed range: " + field.minimum + " - " + field.maximum,
+                CreationUiStyles.Caption);
+            if (individuallyRollable)
             {
                 GUILayout.Label(
                     "Roll " + field.roll.dice_count + "d" + field.roll.die_sides +
                     (field.roll.drop_lowest > 0
                         ? ", drop lowest " + field.roll.drop_lowest
-                        : ""));
+                        : ""),
+                    CreationUiStyles.Caption);
                 var rollValue = serverFieldValues.ContainsKey(field.id)
                     ? serverFieldValues[field.id]
                     : null;
                 bool hasRolled = rollValue != null && rollValue.roll_count > 0;
-                string buttonLabel = rollValue != null && rollValue.roll_count > 0
-                    ? "Reroll " + field.label
-                    : "Roll " + field.label;
-                if (!hasRolled || field.roll.allow_reroll)
-                {
-                    if (GUILayout.Button(buttonLabel))
-                    {
-                        StartCoroutine(RollField(field.id));
-                    }
-                }
                 if (hasRolled)
                 {
                     GUILayout.Label(
                         "Last roll: " + JoinValues(rollValue.roll_dice) +
                         FormatDroppedDice(rollValue.roll_dropped) +
-                        " = " + rollValue.roll_score);
+                        " = " + rollValue.roll_score,
+                        CreationUiStyles.Caption);
                 }
             }
         }
         else if (field.type == "text" || field.type == "presentation")
         {
             string value = textValues.ContainsKey(field.id) ? textValues[field.id] : "";
-            textValues[field.id] = GUILayout.TextField(value);
+            textValues[field.id] = GUILayout.TextField(value, CreationUiStyles.Input);
         }
         else if (field.type == "choice")
         {
@@ -580,6 +923,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 DrawFeatChoices(field);
                 return;
             }
+            if ((field.definition_type == "item" || field.category == "equipment") &&
+                draft != null && draft.equipment_shop != null)
+            {
+                DrawEquipmentShop(field);
+                return;
+            }
             if (HasNestedOptions(field))
             {
                 DrawNestedChoices(field);
@@ -589,9 +938,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
             foreach (var option in field.options ?? new CreationOptionDto[0])
             {
                 bool isSelected = selected.Contains(option.id);
-                bool next = field.multiple
-                    ? GUILayout.Toggle(isSelected, option.label)
-                    : GUILayout.Toggle(isSelected, option.label, "Button");
+                string displayLabel = option.label + (isSelected ? "  [Selected]" : "");
+                bool next = GUILayout.Toggle(
+                    isSelected,
+                    displayLabel,
+                    CreationUiStyles.Selection);
                 if (next)
                 {
                     if (!field.multiple)
@@ -604,7 +955,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 {
                     selected.Remove(option.id);
                 }
-                else if (isSelected)
+                else if (isSelected && !field.required)
                 {
                     selected.Clear();
                 }
@@ -631,13 +982,14 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         showOnlyEligibleFeats = GUILayout.Toolbar(
             showOnlyEligibleFeats ? 1 : 0,
-            new[] { "All feats", "Only eligible feats" }) == 1;
+            new[] { "All feats", "Only eligible feats" },
+            CreationUiStyles.Secondary) == 1;
         GUILayout.Label(
             showOnlyEligibleFeats
                 ? "Feats with unmet or unsupported prerequisites are hidden."
                 : "Unavailable feats remain visible with their requirements.");
-        GUILayout.Label("Search feats");
-        featSearchText = GUILayout.TextField(featSearchText);
+        GUILayout.Label("Search feats", CreationUiStyles.FieldLabel);
+        featSearchText = GUILayout.TextField(featSearchText, CreationUiStyles.Input);
 
         var selected = GetSelectedValues(field.id);
         var visibleOptions = new List<CreationOptionDto>();
@@ -668,7 +1020,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 : "";
         }
 
-        bool sideBySide = Screen.width >= 980f;
+        bool sideBySide = UiLayout.CurrentDensity.SideBySide;
         float listWidth = Mathf.Clamp((Screen.width - 90f) * 0.38f, 320f, 430f);
         if (sideBySide)
         {
@@ -681,7 +1033,10 @@ public sealed class CharacterCreationClient : MonoBehaviour
             sideBySide
                 ? GUILayout.Width(listWidth)
                 : GUILayout.ExpandWidth(true));
-        float listHeight = sideBySide ? 440f : Mathf.Min(300f, Screen.height * 0.4f);
+        float listHeight = UiLayout.BodyListHeight(
+            sideBySide ? 0.62f : 0.42f,
+            sideBySide ? 200f : 150f,
+            sideBySide ? 560f : 300f);
         featListScrollPosition = GUILayout.BeginScrollView(
             featListScrollPosition,
             GUILayout.Height(Mathf.Max(160f, listHeight)));
@@ -696,10 +1051,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     status.State != FeatRequirementState.Met)
                     ? "  [Unavailable]"
                     : "");
-            if (GUILayout.Toggle(isInspected, rowLabel, "Button") && !isInspected)
+            if (GUILayout.Toggle(
+                isInspected,
+                rowLabel,
+                CreationUiStyles.Selection) && !isInspected)
             {
                 inspectedFeatId = option.id;
-                featDetailScrollPosition = Vector2.zero;
             }
         }
         if (visibleOptions.Count == 0)
@@ -712,7 +1069,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
         if (sideBySide)
         {
             GUILayout.BeginVertical(GUI.skin.box, GUILayout.MinWidth(360f));
-            DrawInspectedFeat(visibleOptions, selected, true);
+            DrawInspectedFeat(visibleOptions, selected);
             GUILayout.EndVertical();
             GUILayout.EndHorizontal();
         }
@@ -720,7 +1077,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
         {
             GUILayout.Space(8);
             GUILayout.BeginVertical(GUI.skin.box);
-            DrawInspectedFeat(visibleOptions, selected, false);
+            DrawInspectedFeat(visibleOptions, selected);
             GUILayout.EndVertical();
         }
     }
@@ -734,8 +1091,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawInspectedFeat(
         List<CreationOptionDto> visibleOptions,
-        HashSet<string> selected,
-        bool sideBySide)
+        HashSet<string> selected)
     {
         var option = FindVisibleFeat(visibleOptions, inspectedFeatId);
         if (option == null)
@@ -744,20 +1100,14 @@ public sealed class CharacterCreationClient : MonoBehaviour
             return;
         }
 
-        GUILayout.Label(option.label, TitleStyle());
-        float detailHeight = sideBySide
-            ? 340f
-            : Mathf.Min(300f, Screen.height * 0.4f);
-        featDetailScrollPosition = GUILayout.BeginScrollView(
-            featDetailScrollPosition,
-            GUILayout.Height(Mathf.Max(150f, detailHeight)));
+        GUILayout.Label(option.label, CreationUiStyles.Title);
         GUILayout.Label(string.IsNullOrWhiteSpace(option.description)
             ? "No concise description is available for this feat."
             : option.description,
             WrappedDetailStyle());
 
         GUILayout.Space(8);
-        GUILayout.Label("Requirements");
+        GUILayout.Label("Requirements", CreationUiStyles.Section);
         var statuses = GetFeatRequirementStatuses(option);
         if (statuses.Count == 0)
         {
@@ -783,14 +1133,13 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 WrappedDetailStyle());
             GUI.contentColor = previousColor;
         }
-        GUILayout.EndScrollView();
 
         bool isSelected = selected.Contains(option.id);
         bool hasFailures = HasFeatPrerequisiteFailures(option);
         bool previousEnabled = GUI.enabled;
         GUI.enabled = previousEnabled && (isSelected || !hasFailures);
         string actionLabel = isSelected ? "Remove feat" : "Add feat";
-        if (GUILayout.Button(actionLabel))
+        if (CreationUiStyles.TertiaryButton(actionLabel))
         {
             if (isSelected)
             {
@@ -900,7 +1249,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private static GUIStyle WrappedDetailStyle()
     {
-        return new GUIStyle(GUI.skin.label)
+        return new GUIStyle(CreationUiStyles.Body)
         {
             wordWrap = true,
             stretchWidth = true
@@ -921,6 +1270,409 @@ public sealed class CharacterCreationClient : MonoBehaviour
             default:
                 return false;
         }
+    }
+
+    private void DrawEquipmentShop(CreationFieldDto field)
+    {
+        var shop = draft.equipment_shop;
+        if (shop == null)
+        {
+            GUILayout.Label("Equipment shop unavailable.");
+            return;
+        }
+
+        if (shop.data_status == "provisional")
+        {
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.Label("WARNING: This ruleset uses provisional equipment and starting wealth data. " +
+                (string.IsNullOrEmpty(shop.data_note) ? "Values require verification against official rulebooks." : shop.data_note));
+            GUILayout.EndVertical();
+            GUILayout.Space(6);
+        }
+
+        var state = shop.state;
+        string currencyAbbr = shop.currency != null ? shop.currency.abbreviation : "gp";
+        bool hasChosenWealth = state != null && !string.IsNullOrEmpty(state.wealth_method);
+        bool sideBySide = UiLayout.CurrentDensity.SideBySide;
+
+        GUILayout.BeginVertical(GUI.skin.box);
+        if (!hasChosenWealth)
+        {
+            GUILayout.Label(
+                "Choose Starting Wealth (" + (shop.wealth_definition_type ?? "class") + "):",
+                CreationUiStyles.Title);
+            if (sideBySide)
+            {
+                GUILayout.BeginHorizontal();
+            }
+            if (CreationUiStyles.SecondaryButton(
+                CreationIcons.ActionContent(CreationIcons.Buy, "Roll Starting Wealth")))
+            {
+                StartCoroutine(ChooseStartingWealth("roll"));
+            }
+            if (CreationUiStyles.SecondaryButton("Average Starting Wealth"))
+            {
+                StartCoroutine(ChooseStartingWealth("average"));
+            }
+            if (sideBySide)
+            {
+                GUILayout.EndHorizontal();
+            }
+        }
+        else
+        {
+            if (sideBySide)
+            {
+                GUILayout.BeginHorizontal();
+            }
+            else
+            {
+                GUILayout.BeginVertical();
+            }
+            GUILayout.Label(
+                "Wealth Method: " + state.wealth_method.ToUpperInvariant(),
+                CreationUiStyles.Caption);
+            GUILayout.Label(
+                "Starting Budget: " + state.starting_wealth + " " + currencyAbbr,
+                CreationUiStyles.Body);
+            GUILayout.Label(
+                "Remaining: " + state.remaining_wealth + " " + currencyAbbr,
+                CreationUiStyles.Status);
+            if (state.wealth_roll != null && state.wealth_roll.Length > 0)
+            {
+                GUILayout.Label(
+                    "Rolled: [" + string.Join(", ", state.wealth_roll) + "]",
+                    CreationUiStyles.Caption);
+            }
+            if (sideBySide)
+            {
+                GUILayout.EndHorizontal();
+            }
+            else
+            {
+                GUILayout.EndVertical();
+            }
+        }
+        GUILayout.EndVertical();
+        CreationUiStyles.DrawDivider(4f);
+
+        float shopLayoutWidth = Mathf.Min(Screen.width - 90f, 1100f);
+        if (sideBySide)
+        {
+            GUILayout.BeginHorizontal();
+        }
+
+        // Left column: Shop Catalog & Item Detail
+        GUILayout.BeginVertical(
+            GUI.skin.box,
+            GUILayout.MinWidth(320f),
+            sideBySide ? GUILayout.Width(shopLayoutWidth * 0.58f) : GUILayout.ExpandWidth(true));
+
+        GUILayout.Label(
+            "Equipment Shop (" + (shop.catalog != null ? shop.catalog.Length : 0) + " items)",
+            CreationUiStyles.Title);
+        float catalogHeight = UiLayout.BodyListHeight(
+            sideBySide ? 0.58f : 0.4f,
+            sideBySide ? 200f : 140f,
+            sideBySide ? 520f : 280f);
+        shopListScrollPosition = GUILayout.BeginScrollView(
+            shopListScrollPosition,
+            GUILayout.Height(catalogHeight));
+
+        ShopItemDto selectedItem = null;
+        if (shop.catalog != null)
+        {
+            foreach (var item in shop.catalog)
+            {
+                if (item.id == selectedShopItemId || (string.IsNullOrEmpty(selectedShopItemId) && item.id == hoveredShopItemId))
+                {
+                    selectedItem = item;
+                }
+
+                GUILayout.BeginVertical(GUI.skin.box);
+                GUILayout.BeginHorizontal();
+                var texture = LoadItemTexture(item.image_asset);
+                GUILayout.Label(texture, GUILayout.Width(40), GUILayout.Height(40));
+                GUILayout.BeginVertical();
+                GUILayout.Label(
+                    item.name + " (" + item.cost + " " + currencyAbbr + ")",
+                    CreationUiStyles.FieldLabel);
+                if (!string.IsNullOrEmpty(item.description))
+                {
+                    GUILayout.Label(item.description, WrappedDetailStyle());
+                }
+                GUILayout.EndVertical();
+                bool canAfford = hasChosenWealth && state.remaining_wealth >= item.cost;
+                bool previousEnabled = GUI.enabled;
+                GUI.enabled = previousEnabled && canAfford && !requestInProgress;
+                string buyLabel = "Buy (" + item.cost + " " + currencyAbbr + ")";
+                if (sideBySide)
+                {
+                    GUILayout.FlexibleSpace();
+                    if (CreationUiStyles.TertiaryButton(
+                        CreationIcons.ActionContent(CreationIcons.Buy, buyLabel),
+                        GUILayout.Width(128)))
+                    {
+                        StartCoroutine(PurchaseEquipmentItem(item.id));
+                    }
+                }
+                GUI.enabled = previousEnabled;
+                GUILayout.EndHorizontal();
+                if (!sideBySide)
+                {
+                    GUI.enabled = previousEnabled && canAfford && !requestInProgress;
+                    if (CreationUiStyles.TertiaryButton(
+                        CreationIcons.ActionContent(CreationIcons.Buy, buyLabel),
+                        GUILayout.ExpandWidth(true)))
+                    {
+                        StartCoroutine(PurchaseEquipmentItem(item.id));
+                    }
+                    GUI.enabled = previousEnabled;
+                }
+                GUILayout.EndVertical();
+
+                Rect itemRect = GUILayoutUtility.GetLastRect();
+                if (Event.current.type == EventType.Repaint && itemRect.Contains(Event.current.mousePosition))
+                {
+                    hoveredShopItemId = item.id;
+                }
+                if (Event.current.type == EventType.MouseDown && itemRect.Contains(Event.current.mousePosition))
+                {
+                    selectedShopItemId = item.id;
+                }
+            }
+        }
+        GUILayout.EndScrollView();
+
+        if (selectedItem != null)
+        {
+            GUILayout.Space(6);
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.Label("Details: " + selectedItem.name, CreationUiStyles.Title);
+            GUILayout.Label(
+                "Cost: " + selectedItem.cost + " " + currencyAbbr,
+                CreationUiStyles.Body);
+            if (selectedItem.equipment_slots != null && selectedItem.equipment_slots.Length > 0)
+            {
+                GUILayout.Label("Compatible Slots: " + string.Join(", ", selectedItem.equipment_slots));
+            }
+            if (!string.IsNullOrEmpty(selectedItem.description))
+            {
+                GUILayout.Label(selectedItem.description, WrappedDetailStyle());
+            }
+            GUILayout.EndVertical();
+        }
+
+        GUILayout.EndVertical();
+
+        if (sideBySide)
+        {
+            GUILayout.Space(12);
+        }
+
+        // Right column: Loadout & Backpack
+        GUILayout.BeginVertical(
+            GUI.skin.box,
+            GUILayout.MinWidth(280f),
+            sideBySide ? GUILayout.Width(shopLayoutWidth * 0.38f) : GUILayout.ExpandWidth(true));
+
+        GUILayout.Label("Character Loadout", CreationUiStyles.Title);
+
+        var ownedItems = state != null && state.items != null ? state.items : new EquipmentItemInstanceDto[0];
+        var slotNames = new List<string> { "main_hand", "off_hand", "body" };
+        foreach (var it in ownedItems)
+        {
+            if (!string.IsNullOrEmpty(it.slot) && !slotNames.Contains(it.slot))
+            {
+                slotNames.Add(it.slot);
+            }
+        }
+
+        foreach (var slotName in slotNames)
+        {
+            EquipmentItemInstanceDto equippedInstance = null;
+            foreach (var it in ownedItems)
+            {
+                if (it.slot == slotName)
+                {
+                    equippedInstance = it;
+                    break;
+                }
+            }
+
+            if (sideBySide)
+            {
+                GUILayout.BeginHorizontal(GUI.skin.box);
+                GUILayout.Label(slotName + ":", CreationUiStyles.FieldLabel, GUILayout.Width(90));
+            }
+            else
+            {
+                GUILayout.BeginVertical(GUI.skin.box);
+                GUILayout.Label(slotName + ":", CreationUiStyles.FieldLabel);
+            }
+            if (equippedInstance != null)
+            {
+                string itemName = GetItemDisplayName(equippedInstance.item_id, shop);
+                GUILayout.Label(itemName);
+                if (sideBySide)
+                {
+                    GUILayout.FlexibleSpace();
+                }
+                if (CreationUiStyles.TertiaryButton(
+                    CreationIcons.ActionContent(CreationIcons.Equip, "Unequip"),
+                    sideBySide
+                        ? new[] { GUILayout.Width(96) }
+                        : new[] { GUILayout.ExpandWidth(true) }))
+                {
+                    StartCoroutine(UnequipEquipmentItem(equippedInstance.instance_id));
+                }
+            }
+            else
+            {
+                GUILayout.Label("[Empty]");
+            }
+            if (sideBySide)
+            {
+                GUILayout.EndHorizontal();
+            }
+            else
+            {
+                GUILayout.EndVertical();
+            }
+        }
+
+        GUILayout.Space(8);
+        GUILayout.Label("Backpack", CreationUiStyles.Title);
+
+        var backpackItems = new List<EquipmentItemInstanceDto>();
+        foreach (var it in ownedItems)
+        {
+            if (string.IsNullOrEmpty(it.slot))
+            {
+                backpackItems.Add(it);
+            }
+        }
+
+        if (backpackItems.Count == 0)
+        {
+            GUILayout.Label("Backpack is empty.");
+        }
+        else
+        {
+            float bpHeight = UiLayout.BodyListHeight(
+                sideBySide ? 0.3f : 0.24f,
+                sideBySide ? 120f : 100f,
+                sideBySide ? 280f : 180f);
+            backpackScrollPosition = GUILayout.BeginScrollView(
+                backpackScrollPosition,
+                GUILayout.Height(bpHeight));
+
+            foreach (var bpItem in backpackItems)
+            {
+                string itemName = GetItemDisplayName(bpItem.item_id, shop);
+                if (sideBySide)
+                {
+                    GUILayout.BeginHorizontal(GUI.skin.box);
+                    GUILayout.Label(itemName);
+                    GUILayout.FlexibleSpace();
+                }
+                else
+                {
+                    GUILayout.BeginVertical(GUI.skin.box);
+                    GUILayout.Label(itemName, CreationUiStyles.FieldLabel);
+                }
+                var itemDef = FindShopItem(bpItem.item_id, shop);
+                if (itemDef != null && itemDef.equipment_slots != null)
+                {
+                    foreach (var s in itemDef.equipment_slots)
+                    {
+                        if (CreationUiStyles.TertiaryButton(
+                            CreationIcons.ActionContent(
+                                CreationIcons.Equip,
+                                "Equip (" + s + ")"),
+                            sideBySide
+                                ? new[] { GUILayout.Width(120) }
+                                : new[] { GUILayout.ExpandWidth(true) }))
+                        {
+                            StartCoroutine(EquipEquipmentItem(bpItem.instance_id, s));
+                        }
+                    }
+                }
+                if (sideBySide)
+                {
+                    GUILayout.EndHorizontal();
+                }
+                else
+                {
+                    GUILayout.EndVertical();
+                }
+            }
+            GUILayout.EndScrollView();
+        }
+
+        GUILayout.EndVertical();
+
+        if (sideBySide)
+        {
+            GUILayout.EndHorizontal();
+        }
+    }
+
+    private Texture2D GetFallbackItemTexture()
+    {
+        if (fallbackItemTexture == null)
+        {
+            fallbackItemTexture = new Texture2D(32, 32);
+            var pixels = new Color[32 * 32];
+            Color baseColor = new Color(0.28f, 0.28f, 0.32f, 1f);
+            Color borderColor = new Color(0.5f, 0.5f, 0.55f, 1f);
+            for (int y = 0; y < 32; y++)
+            {
+                for (int x = 0; x < 32; x++)
+                {
+                    bool isBorder = x == 0 || x == 31 || y == 0 || y == 31;
+                    pixels[y * 32 + x] = isBorder ? borderColor : baseColor;
+                }
+            }
+            fallbackItemTexture.SetPixels(pixels);
+            fallbackItemTexture.Apply();
+        }
+        return fallbackItemTexture;
+    }
+
+    private Texture2D LoadItemTexture(string imageAsset)
+    {
+        if (!string.IsNullOrEmpty(imageAsset))
+        {
+            var tex = Resources.Load<Texture2D>(ResourcePath(imageAsset));
+            if (tex != null)
+            {
+                return tex;
+            }
+        }
+        return GetFallbackItemTexture();
+    }
+
+    private static string GetItemDisplayName(string itemId, EquipmentShopDto shop)
+    {
+        var item = FindShopItem(itemId, shop);
+        return item != null ? item.name : itemId;
+    }
+
+    private static ShopItemDto FindShopItem(string itemId, EquipmentShopDto shop)
+    {
+        if (shop?.catalog == null)
+        {
+            return null;
+        }
+        foreach (var item in shop.catalog)
+        {
+            if (item.id == itemId)
+            {
+                return item;
+            }
+        }
+        return null;
     }
 
     private void DrawSkillRanks(CreationFieldDto field)
@@ -973,14 +1725,29 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 : option.ranks;
             float rankStep = option.cost_per_rank == 1 ? 1f : 0.5f;
             float pointCost = rankStep * option.cost_per_rank;
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(
-                option.label + " — " + option.detail +
-                (option.is_class_skill ? " · class skill" : " · cross-class"),
-                GUILayout.MinWidth(320));
+            bool sideBySide = UiLayout.CurrentDensity.SideBySide;
+            if (sideBySide)
+            {
+                GUILayout.BeginHorizontal(GUI.skin.box);
+                GUILayout.Label(
+                    option.label + " — " + option.detail +
+                    (option.is_class_skill ? " · class skill" : " · cross-class"),
+                    CreationUiStyles.Body,
+                    GUILayout.MinWidth(320));
+            }
+            else
+            {
+                GUILayout.BeginVertical(GUI.skin.box);
+                GUILayout.Label(option.label, CreationUiStyles.FieldLabel);
+                GUILayout.Label(
+                    (option.detail ?? "") +
+                    (option.is_class_skill ? " · class skill" : " · cross-class"),
+                    CreationUiStyles.Caption);
+                GUILayout.BeginHorizontal();
+            }
             bool previousEnabled = GUI.enabled;
             GUI.enabled = previousEnabled && current >= rankStep;
-            if (GUILayout.Button("-", GUILayout.Width(32)))
+            if (CreationUiStyles.IconButton(new GUIContent("-"), GUILayout.Width(40)))
             {
                 current = Mathf.Max(0f, current - rankStep);
                 skillRankValues[option.skill_id] = current;
@@ -997,7 +1764,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
             GUI.enabled = previousEnabled &&
                 current + rankStep <= option.maximum_ranks &&
                 pointCost <= remainingPoints;
-            if (GUILayout.Button("+", GUILayout.Width(32)))
+            if (CreationUiStyles.IconButton(new GUIContent("+"), GUILayout.Width(40)))
             {
                 current += rankStep;
                 skillRankValues[option.skill_id] = current;
@@ -1005,8 +1772,15 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 remainingPoints = Mathf.Max(0f, remainingPoints - pointCost);
             }
             GUI.enabled = previousEnabled;
-            GUILayout.Label("ranks (max " + option.maximum_ranks + ")");
+            GUILayout.Label(
+                option.maximum_ranks.ToString(
+                    "0.##",
+                    System.Globalization.CultureInfo.InvariantCulture) + " max");
             GUILayout.EndHorizontal();
+            if (!sideBySide)
+            {
+                GUILayout.EndVertical();
+            }
         }
     }
 
@@ -1048,25 +1822,62 @@ public sealed class CharacterCreationClient : MonoBehaviour
             }
 
             bool expanded = expandedChoiceFields.Contains(field.id + ":" + parent.id);
-            string selectionLabel = "";
-            if (selected.Contains(parent.id))
+            bool isParentSelected = selected.Contains(parent.id);
+            bool isChildSelected = false;
+            string selectedChildLabel = "";
+            foreach (var child in children)
             {
-                selectionLabel = " (Standard)";
-            }
-            else
-            {
-                foreach (var child in children)
+                if (selected.Contains(child.id))
                 {
-                    if (selected.Contains(child.id))
-                    {
-                        selectionLabel = " (" + child.label + ")";
-                        break;
-                    }
+                    isChildSelected = true;
+                    selectedChildLabel = child.label;
+                    break;
                 }
             }
+
+            string displayLabel = parent.label;
+            if (isChildSelected)
+            {
+                displayLabel += " (" + selectedChildLabel + ")  [Selected]";
+            }
+            else if (isParentSelected)
+            {
+                displayLabel += " (Standard)  [Selected]";
+            }
+
             string key = field.id + ":" + parent.id;
-            if (GUILayout.Button(
-                parent.label + selectionLabel + (expanded ? " ▲" : " ▼")))
+            bool isCurrentSelected = isParentSelected || isChildSelected;
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Toggle(
+                isCurrentSelected,
+                displayLabel,
+                CreationUiStyles.Selection,
+                GUILayout.ExpandWidth(true)))
+            {
+                if (!isCurrentSelected)
+                {
+                    if (!field.multiple)
+                    {
+                        selected.Clear();
+                    }
+                    selected.Add(parent.id);
+                    expandedChoiceFields.Add(key);
+                }
+            }
+            else if (isCurrentSelected && !field.required)
+            {
+                selected.Remove(parent.id);
+                foreach (var child in children)
+                {
+                    selected.Remove(child.id);
+                }
+            }
+
+            string arrow = expanded ? " ▲ " : " ▼ ";
+            if (CreationUiStyles.IconButton(
+                new GUIContent(arrow),
+                GUILayout.Width(44)))
             {
                 if (expanded)
                 {
@@ -1077,15 +1888,17 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     expandedChoiceFields.Add(key);
                 }
             }
+            GUILayout.EndHorizontal();
+
             if (!expanded)
             {
                 continue;
             }
 
-            DrawChoiceOption(field, parent, "  " + parent.label + " (Standard)");
+            DrawChoiceOption(field, parent, "    " + parent.label + " (Standard)");
             foreach (var child in children)
             {
-                DrawChoiceOption(field, child, "  " + child.label);
+                DrawChoiceOption(field, child, "    " + child.label);
             }
         }
     }
@@ -1097,7 +1910,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         var selected = GetSelectedValues(field.id);
         bool isSelected = selected.Contains(option.id);
-        bool next = GUILayout.Toggle(isSelected, label, "Button");
+        string displayLabel = label + (isSelected ? "  [Selected]" : "");
+        bool next = GUILayout.Toggle(
+            isSelected,
+            displayLabel,
+            CreationUiStyles.Selection);
         if (next)
         {
             if (!field.multiple)
@@ -1106,7 +1923,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
             }
             selected.Add(option.id);
         }
-        else if (isSelected)
+        else if (field.multiple)
+        {
+            selected.Remove(option.id);
+        }
+        else if (isSelected && !field.required)
         {
             selected.Remove(option.id);
         }
@@ -1144,11 +1965,77 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private IEnumerator SaveStepAndContinue(int stepIndex)
     {
+        yield return SaveCurrentStepFields(stepIndex);
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            yield break;
+        }
+
+        if (stepIndex + 1 < flow.creation_flow.steps.Length)
+        {
+            yield return SendRequest(
+                "POST",
+                "/api/drafts/" + Uri.EscapeDataString(draftId) + "/advance",
+                "{}",
+                (status, response) =>
+                {
+                    if (IsSuccess(status))
+                    {
+                        ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+                    }
+                    else
+                    {
+                        SetError(response);
+                    }
+                });
+        }
+        else
+        {
+            yield return LoadReview();
+        }
+    }
+
+    private IEnumerator SaveStepAndNavigate(int currentStepIndex, int targetStepIndex)
+    {
+        yield return SaveCurrentStepFields(currentStepIndex);
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            yield break;
+        }
+
+        var request = new StepSelectionRequestDto
+        {
+            step_id = flow.creation_flow.steps[targetStepIndex].id
+        };
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/step",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (IsSuccess(status))
+                {
+                    ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+                }
+                else
+                {
+                    SetError(response);
+                }
+            });
+    }
+
+    private IEnumerator SaveCurrentStepFields(int stepIndex)
+    {
         var step = flow.creation_flow.steps[stepIndex];
         foreach (var field in step.fields)
         {
             if (field.type == "choice")
             {
+                if ((field.definition_type == "item" || field.category == "equipment") &&
+                    draft != null && draft.equipment_shop != null)
+                {
+                    continue;
+                }
                 if (field.skill_selection == "ranks")
                 {
                     var ranks = new List<SkillRankEntryDto>();
@@ -1179,6 +2066,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     continue;
                 }
                 string[] choices = new List<string>(GetSelectedValues(field.id)).ToArray();
+                if (field.required && choices.Length == 0)
+                {
+                    errorMessage = field.label + " is required.";
+                    yield break;
+                }
                 if (field.multiple)
                 {
                     var request = new MultipleChoiceFieldRequestDto
@@ -1190,10 +2082,6 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 }
                 else
                 {
-                    if (choices.Length == 0)
-                    {
-                        continue;
-                    }
                     var request = new StringFieldRequestDto
                     {
                         field_id = field.id,
@@ -1217,11 +2105,21 @@ public sealed class CharacterCreationClient : MonoBehaviour
                         yield return UpdateField(JsonUtility.ToJson(
                             new FloatFieldRequestDto { field_id = field.id, value = number }));
                     }
+                    else
+                    {
+                        errorMessage = field.label + " must be a valid number.";
+                        yield break;
+                    }
                 }
                 else if (int.TryParse(raw, out int number))
                 {
                     yield return UpdateField(JsonUtility.ToJson(
                         new IntegerFieldRequestDto { field_id = field.id, value = number }));
+                }
+                else
+                {
+                    errorMessage = field.label + " must be a whole number.";
+                    yield break;
                 }
             }
             else
@@ -1239,34 +2137,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 yield break;
             }
         }
-
-        if (stepIndex + 1 < flow.creation_flow.steps.Length)
-        {
-            yield return SendRequest(
-                "POST",
-                "/api/drafts/" + Uri.EscapeDataString(draftId) + "/advance",
-                "{}",
-                (status, response) =>
-                {
-                    if (IsSuccess(status))
-                    {
-                        draft = JsonUtility.FromJson<DraftResponseDto>(response);
-                    }
-                    else
-                    {
-                        SetError(response);
-                    }
-                });
-        }
-        else
-        {
-            yield return LoadReview();
-        }
     }
 
     private IEnumerator SaveStepAndExit(int stepIndex)
     {
-        yield return SaveStepAndContinue(stepIndex);
+        yield return SaveCurrentStepFields(stepIndex);
         if (string.IsNullOrEmpty(errorMessage))
         {
             screen = ClientScreen.Rulesets;
@@ -1404,26 +2279,28 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawReview()
     {
-        GUILayout.Label("Character review", TitleStyle());
-        GUILayout.Label(characterName + " - " + selectedRuleset.name);
+        GUILayout.Label("Character review", CreationUiStyles.Title);
+        GUILayout.Label(characterName + " - " + selectedRuleset.name, CreationUiStyles.Body);
         if (draft.review != null)
         {
             foreach (var issue in draft.review.issues ?? new ValidationIssueDto[0])
             {
                 GUILayout.Label(
                     issue.severity.ToUpperInvariant() + ": " + issue.message,
-                    issue.severity == "error" ? ErrorStyle() : GUI.skin.label);
+                    issue.severity == "error" ? ErrorStyle() : CreationUiStyles.Body);
             }
-            if (draft.review.can_finalize && GUILayout.Button("Save character"))
+            if (draft.review.can_finalize &&
+                CreationUiStyles.PrimaryButton(
+                    CreationIcons.ActionContent(CreationIcons.Save, "Save character")))
             {
                 StartCoroutine(FinalizeCharacter());
             }
             else if (!draft.review.can_finalize)
             {
-                GUILayout.Label("Resolve blocking issues before saving.");
+                GUILayout.Label("Resolve blocking issues before saving.", CreationUiStyles.Body);
             }
         }
-        if (GUILayout.Button("Return to creation"))
+        if (CreationUiStyles.TertiaryButton("Return to creation"))
         {
             screen = ClientScreen.Editing;
         }
@@ -1473,13 +2350,85 @@ public sealed class CharacterCreationClient : MonoBehaviour
             });
     }
 
+    private IEnumerator ChooseStartingWealth(string method)
+    {
+        var request = new StartingWealthRequestDto { method = method };
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/equipment/wealth",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    SetError(response);
+                    return;
+                }
+                ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+            });
+    }
+
+    private IEnumerator PurchaseEquipmentItem(string itemId)
+    {
+        var request = new PurchaseEquipmentRequestDto { item_id = itemId };
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/equipment/purchase",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    SetError(response);
+                    return;
+                }
+                ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+            });
+    }
+
+    private IEnumerator EquipEquipmentItem(string instanceId, string slot)
+    {
+        var request = new EquipItemRequestDto { instance_id = instanceId, slot = slot };
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/equipment/equip",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    SetError(response);
+                    return;
+                }
+                ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+            });
+    }
+
+    private IEnumerator UnequipEquipmentItem(string instanceId)
+    {
+        var request = new UnequipItemRequestDto { instance_id = instanceId };
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/equipment/unequip",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    SetError(response);
+                    return;
+                }
+                ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+            });
+    }
+
     private void DrawBoardStatus()
     {
         if (themeLogo != null)
         {
             GUILayout.Label(themeLogo, GUILayout.Width(64), GUILayout.Height(64));
         }
-        GUILayout.Label("Local solo session", TitleStyle());
+        GUILayout.Label("Local solo session");
         GUILayout.Label("Character: " + characterName);
         if (GUILayout.Button("Back to rulesets"))
         {
@@ -1539,7 +2488,14 @@ public sealed class CharacterCreationClient : MonoBehaviour
             themedSkin = Instantiate(defaultSkin);
         }
         GUI.skin = themedSkin;
-        GUI.skin.font = themeFont != null ? themeFont : defaultSkin.font;
+        Font interfaceFont = screen == ClientScreen.Board && themeFont != null
+            ? themeFont
+            : defaultSkin.font;
+        GUI.skin.font = interfaceFont;
+        GUI.skin.label.font = interfaceFont;
+        GUI.skin.button.font = interfaceFont;
+        GUI.skin.textField.font = interfaceFont;
+        GUI.skin.textArea.font = interfaceFont;
         GUI.backgroundColor = Color.white;
         GUI.contentColor = Color.white;
         if (activeTheme == null || activeTheme.tokens == null)
@@ -1709,33 +2665,37 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private void DrawCreationSurfaces()
     {
         var screenRect = new Rect(0, 0, Screen.width, Screen.height);
-        if (themeBackground != null)
-        {
-            DrawTiledTexture(screenRect, themeBackground);
-        }
-        else if (TryGetThemeColor("background", out var background))
-        {
-            GUI.color = background;
-            GUI.DrawTexture(screenRect, Texture2D.whiteTexture);
-            GUI.color = Color.white;
-        }
+        CreationUiStyles.DrawBackdrop(screenRect, themeBackground);
 
         float horizontalMargin = Mathf.Min(20f, Screen.width * 0.05f);
         float verticalMargin = Mathf.Min(16f, Screen.height * 0.05f);
+        float frameWidth = Mathf.Min(
+            1180f,
+            Mathf.Max(0f, Screen.width - 2f * horizontalMargin));
         var contentRect = new Rect(
-            horizontalMargin,
+            (Screen.width - frameWidth) * 0.5f,
             verticalMargin,
-            Mathf.Max(0f, Screen.width - 2f * horizontalMargin),
+            frameWidth,
             Mathf.Max(0f, Screen.height - 2f * verticalMargin));
+        GUI.Box(contentRect, GUIContent.none, CreationUiStyles.Frame);
         if (themePanel != null)
         {
+            Color previousColor = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.08f);
             DrawTiledTexture(contentRect, themePanel);
+            GUI.color = previousColor;
         }
-        if (themeMetalTrim != null)
+        if (themeMetalTrim != null && Screen.width >= UiLayout.SmMax)
         {
             DrawMetalBorder(contentRect);
         }
-        GUILayout.BeginArea(contentRect);
+        float inset = Screen.width < UiLayout.SmMax ? 10f : 16f;
+        var innerRect = new Rect(
+            contentRect.x + inset,
+            contentRect.y + inset,
+            Mathf.Max(0f, contentRect.width - 2f * inset),
+            Mathf.Max(0f, contentRect.height - 2f * inset));
+        GUILayout.BeginArea(innerRect);
     }
 
     private void DrawBoardFrame()
@@ -1856,6 +2816,37 @@ public sealed class CharacterCreationClient : MonoBehaviour
         return ColorUtility.TryParseHtmlString(value, out color);
     }
 
+    private Color ThemeColor(string token, Color fallback)
+    {
+        return TryGetThemeToken(token, out var color) ? color : fallback;
+    }
+
+    private bool TryGetThemeToken(string token, out Color color)
+    {
+        color = Color.white;
+        if (activeTheme == null || activeTheme.tokens == null)
+        {
+            return false;
+        }
+        string value;
+        switch (token)
+        {
+            case "accent":
+                value = activeTheme.tokens.accent;
+                break;
+            case "text":
+                value = activeTheme.tokens.text;
+                break;
+            case "surface":
+                value = activeTheme.tokens.surface;
+                break;
+            default:
+                value = activeTheme.tokens.background;
+                break;
+        }
+        return ColorUtility.TryParseHtmlString(value, out color);
+    }
+
     private void RestoreThemeColors()
     {
         GUI.backgroundColor = Color.white;
@@ -1864,15 +2855,6 @@ public sealed class CharacterCreationClient : MonoBehaviour
         {
             GUI.skin = defaultSkin;
         }
-    }
-
-    private static GUIStyle TitleStyle()
-    {
-        return new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 24,
-            fontStyle = FontStyle.Bold
-        };
     }
 
     private static GUIStyle ErrorStyle()

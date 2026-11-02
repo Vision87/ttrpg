@@ -36,6 +36,11 @@ def test_unity_client_renders_package_flows_and_ruleset_themes_generically() -> 
     assert "/api/drafts" in creator
     assert "field.type" in creator
     assert "FindStepIndex" in creator
+    assert "StepSummaryHeader" in creator
+    assert "SaveStepAndNavigate" in creator
+    assert "SaveCurrentStepFields" in creator
+    assert '"/step"' in creator
+    assert "public string step_id;" in (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
     assert "activeTheme" in creator
     assert "Resources.Load<Texture2D>" in creator
     assert "Resources.Load<Font>" in creator
@@ -84,20 +89,20 @@ def test_unity_client_renders_package_flows_and_ruleset_themes_generically() -> 
     assert "FeatRequirementState" in creator
     assert '"CANNOT VERIFY"' in creator
     assert "new Color(1f, 0.3f, 0.28f)" in creator
-    assert "GUILayout.Toggle(isInspected, rowLabel, \"Button\")" in creator
+    assert "CreationUiStyles.Selection) && !isInspected" in creator
     assert "GetSelectedValues(field.id)" in creator
     assert "selected.Add(option.id);" in creator
-    assert "GUILayout.Button(actionLabel)" in creator
+    assert "CreationUiStyles.TertiaryButton(actionLabel)" in creator
     assert "HasFeatPrerequisiteFailures(option)" in creator
     assert "GUILayout.BeginHorizontal();" in creator
-    assert "Screen.width >= 980f" in creator
+    assert "UiLayout.CurrentDensity.SideBySide" in creator
     assert "option.description" in creator
     assert "public string description;" in (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
     assert "scrollPosition = Vector2.zero;" in creator
     assert "SkillAllocationOptionDto" in creator
     assert "skillRankValues[option.skill_id]" in creator
-    assert 'GUILayout.Button("-", GUILayout.Width(32))' in creator
-    assert 'GUILayout.Button("+", GUILayout.Width(32))' in creator
+    assert 'CreationUiStyles.IconButton(new GUIContent("-"), GUILayout.Width(40))' in creator
+    assert 'CreationUiStyles.IconButton(new GUIContent("+"), GUILayout.Width(40))' in creator
     assert "current = Mathf.Max(0f, current - rankStep);" in creator
     assert "pointCost <= remainingPoints" in creator
     assert '" remaining)"' in creator
@@ -105,7 +110,44 @@ def test_unity_client_renders_package_flows_and_ruleset_themes_generically() -> 
     assert "CreationPrerequisiteDto" in (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
     assert "option.parent_id" in creator
     assert "parent_id" in (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    assert "field.required && choices.Length == 0" in creator
     assert "ApplyTheme(envelope.theme)" in projections
+
+
+def test_ability_score_roll_uses_local_dice_icon() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    icons = (ROOT / "Assets/Scripts/CreationIcons.cs").read_text()
+    field_start = creator.index("private void DrawField(CreationFieldDto field)")
+    field_end = creator.index("\n    private ", field_start + 1)
+    field_draw = creator[field_start:field_end]
+
+    assert (ROOT / "ArtSource/ui.icon.dice.svg").is_file()
+    assert (ROOT / "Assets/Resources/ui.icon.dice.png").is_file()
+    assert 'public const string Dice = "dice";' in icons
+    assert "Load(Dice);" in icons
+    assert "Resources.Load<Texture2D>(\"ui.icon.\" + key)" in icons
+    assert "field.type == \"number\" && IsIndividuallyRollable(field)" in field_draw
+    assert "GUILayout.BeginHorizontal();" in field_draw
+    assert "CreationUiStyles.IconButton(" in field_draw
+    assert "CreationIcons.IconContent(CreationIcons.Dice, buttonLabel)" in field_draw
+    assert "if (!hasRolled || field.roll.allow_reroll)" in field_draw
+    assert '"Last roll: " + JoinValues(rollValue.roll_dice)' in field_draw
+
+
+def test_score_group_roll_is_in_fixed_actions_above_scrollable_fields() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    draw_step_start = creator.index("private void DrawCreationStep()")
+    group_draw_start = creator.index("private void DrawScoreGroups(CreationStepDto step)")
+    draw_step = creator[draw_step_start:group_draw_start]
+    group_draw_end = creator.index("\n    private ", group_draw_start + 1)
+    group_draw = creator[group_draw_start:group_draw_end]
+
+    assert draw_step.index("SaveStepAndExit(stepIndex)") < draw_step.index("DrawScoreGroups(step);")
+    assert draw_step.index("DrawScoreGroups(step);") < draw_step.index("GUILayout.EndVertical();")
+    assert draw_step.index("GUILayout.EndVertical();") < draw_step.index("GUILayout.BeginScrollView(")
+    assert "GroupIsOnStep(group, step)" in group_draw
+    assert "if (hasRolled && !group.allow_reroll)" in group_draw
+    assert "StartCoroutine(RollGroup(group.id));" in group_draw
 
 
 def test_theme_surfaces_and_board_frame_adapt_without_changing_play_surface() -> None:
@@ -137,7 +179,7 @@ def test_feat_detail_pane_separates_inspection_from_selection() -> None:
     assert "inspectedFeatId = option.id;" in browsing
     assert "selected.Add(option.id)" not in browsing
     assert "selected.Remove(option.id)" not in browsing
-    assert "GUILayout.Button(actionLabel)" in detail
+    assert "CreationUiStyles.TertiaryButton(actionLabel)" in detail
     assert "selected.Add(option.id);" in detail
     assert "selected.Remove(option.id);" in detail
     assert "FeatRequirementState.Met" in requirement_status
@@ -146,6 +188,159 @@ def test_feat_detail_pane_separates_inspection_from_selection() -> None:
     assert 'prerequisite.rule == "feat"' in requirement_status
     assert 'prerequisite.rule == "skill"' in requirement_status
     assert "IsAbilityId(prerequisite.rule)" in requirement_status
-    assert "Screen.width >= 980f" in browsing
+    assert "UiLayout.CurrentDensity.SideBySide" in browsing
     assert "GUILayout.BeginHorizontal();" in browsing
-    assert "DrawInspectedFeat(visibleOptions, selected, false)" in browsing
+    assert "DrawInspectedFeat(visibleOptions, selected)" in browsing
+    assert "GUILayout.BeginScrollView" not in detail
+    assert "WrappedDetailStyle()" in detail
+
+
+def test_step_navigation_saves_before_switch_and_preserves_sequential_flow() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    navigation = creator[
+        creator.index("private IEnumerator SaveStepAndNavigate"):
+        creator.index("private IEnumerator SaveCurrentStepFields")
+    ]
+    continuation = creator[
+        creator.index("private IEnumerator SaveStepAndContinue"):
+        creator.index("private IEnumerator SaveStepAndNavigate")
+    ]
+    exit_draft = creator[
+        creator.index("private IEnumerator SaveStepAndExit"):
+        creator.index("private IEnumerator UpdateField")
+    ]
+    assert "StepSummaryHeader" in creator
+    assert "step.label" in creator
+    assert navigation.index("yield return SaveCurrentStepFields") < navigation.index('"/step"')
+    assert "ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true)" in navigation
+    assert continuation.index("yield return SaveCurrentStepFields") < continuation.index('"/advance"')
+    assert "yield return LoadReview();" in continuation
+    assert "yield return SaveCurrentStepFields(stepIndex);" in exit_draft
+    assert "SaveStepAndContinue" not in exit_draft
+
+
+def test_equipment_shop_client_contract_dtos() -> None:
+    session_dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    assert "public class EquipmentShopDto" in session_dtos
+    assert "public ShopCurrencyDto currency;" in session_dtos
+    assert "public ShopItemDto[] catalog;" in session_dtos
+    assert "public EquipmentStateDto state;" in session_dtos
+    assert "public class ShopItemDto" in session_dtos
+    assert "public string[] equipment_slots;" in session_dtos
+    assert "public class EquipmentStateDto" in session_dtos
+    assert "public EquipmentItemInstanceDto[] items;" in session_dtos
+    assert "public class StartingWealthRequestDto" in session_dtos
+    assert "public class PurchaseEquipmentRequestDto" in session_dtos
+    assert "public class EquipItemRequestDto" in session_dtos
+    assert "public class UnequipItemRequestDto" in session_dtos
+    assert "public EquipmentShopDto equipment_shop;" in session_dtos
+    assert "public EquipmentStateDto equipment_state;" in session_dtos
+
+
+def test_equipment_shop_ui_rendering_and_interaction_contracts() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    assert "DrawEquipmentShop" in creator
+    assert "draft.equipment_shop" in creator
+    assert "shop.data_status == \"provisional\"" in creator
+    assert "Roll Starting Wealth" in creator
+    assert "Average Starting Wealth" in creator
+    assert "GetFallbackItemTexture" in creator
+    assert "UiLayout.CurrentDensity.SideBySide" in creator
+    assert "Character Loadout" in creator
+    assert "Backpack" in creator
+    assert "ChooseStartingWealth" in creator
+    assert "PurchaseEquipmentItem" in creator
+    assert "EquipEquipmentItem" in creator
+    assert "UnequipEquipmentItem" in creator
+    assert "/equipment/wealth" in creator
+    assert "/equipment/purchase" in creator
+    assert "/equipment/equip" in creator
+    assert "/equipment/unequip" in creator
+
+
+def test_creation_layout_uses_shared_density_and_fixed_chrome() -> None:
+    layout = (ROOT / "Assets/Scripts/UiLayout.cs").read_text()
+    styles = (ROOT / "Assets/Scripts/CreationUiStyles.cs").read_text()
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    header = (ROOT / "Assets/Scripts/StepSummaryHeader.cs").read_text()
+    assert "width < XsMax" in layout
+    assert "width < SmMax" in layout
+    assert "width < MdMax" in layout
+    assert "width < LgMax" in layout
+    assert "XsMax = 480f" in layout
+    assert "SmMax = 680f" in layout
+    assert "MdMax = 980f" in layout
+    assert "LgMax = 1280f" in layout
+    limits = (480, 680, 980, 1280)
+    sample_modes = {
+        375: "xs",
+        768: "md",
+        1024: "lg",
+        1440: "xl",
+    }
+    for width, expected in sample_modes.items():
+        actual = (
+            "xs" if width < limits[0] else
+            "sm" if width < limits[1] else
+            "md" if width < limits[2] else
+            "lg" if width < limits[3] else
+            "xl"
+        )
+        assert actual == expected
+    assert "SideBySide = false" in layout
+    assert "SideBySide = true" in layout
+    assert "UiLayout.CurrentDensity" in creator
+    assert "UiLayout.CurrentDensity" in header
+    assert "CreationUiStyles.PrimaryButton" in creator
+    assert "CreationUiStyles.TertiaryButton" in creator
+    assert "public static GUIStyle Selection" in styles
+    editing = creator[
+        creator.index("private void DrawCreationStep"):
+        creator.index("private void DrawScoreGroups")
+    ]
+    assert editing.index("stepSummaryHeader.DrawHeader()") < editing.index(
+        'GUILayout.Label(step.label, CreationUiStyles.Title)')
+    assert editing.index("CreationUiStyles.PrimaryButton") < editing.index(
+        "GUILayout.BeginScrollView")
+    assert editing.index("GUILayout.BeginScrollView") < editing.index(
+        "foreach (var field in step.fields)")
+    assert "GUILayout.EndScrollView();" in editing
+
+
+def test_creation_ui_declares_readable_type_roles_and_theme_safe_surfaces() -> None:
+    styles = (ROOT / "Assets/Scripts/CreationUiStyles.cs").read_text()
+    layout = (ROOT / "Assets/Scripts/UiLayout.cs").read_text()
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    webgl_builder = (ROOT / "Assets/Editor/WebGLBuild.cs").read_text()
+
+    for role in ("Title", "Section", "Body", "FieldLabel", "Caption", "Status"):
+        assert f"public static GUIStyle {role}" in styles
+    assert "font = displayFont" in styles
+    assert "font = readableFont" in styles
+    assert 'Resources.GetBuiltinResource<Font>("Arial.ttf")' in styles
+    assert "GUI.skin.font = readableFont" in styles
+    assert "CreationUiStyles.Configure(" in creator
+    assert "CreationUiStyles.DrawBackdrop(screenRect, themeBackground)" in creator
+    assert "DrawTiledTexture(contentRect, themePanel)" in creator
+    assert "themeControl," in creator
+    assert "CreateFramedTexture" in styles
+    assert "DrawDivider" in styles
+    assert "themedControlTexture ?? buttonTexture" in styles
+    assert "EnsureContrast(" in styles
+    assert "4.5f" in styles
+    assert "RelativeLuminance" in styles
+    assert "wordWrap = true" in styles
+    assert "ConfigureResponsiveCanvas(outputPath)" in webgl_builder
+    assert "config.devicePixelRatio = 1;" in webgl_builder
+    assert "window.innerWidth" in webgl_builder
+    assert "window.innerHeight" in webgl_builder
+
+    mobile = layout[
+        layout.index("case Breakpoint.Xs:"):
+        layout.index("case Breakpoint.Sm:")
+    ]
+    assert "BodyFont = 18" in mobile
+    assert "LabelFont = 17" in mobile
+    assert "CaptionFont = 15" in mobile
+    assert "SideBySide = false" in mobile
+    assert "if (!sideBySide)" in creator

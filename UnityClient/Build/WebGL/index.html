@@ -120,6 +120,14 @@
       }
 
 
+      config.devicePixelRatio = 1;
+      var resizeUnityCanvas = function() {
+        fullscreenContainer.style.width = window.innerWidth + "px";
+        fullscreenContainer.style.height = window.innerHeight + "px";
+      };
+      resizeUnityCanvas();
+      window.addEventListener("resize", resizeUnityCanvas);
+
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {

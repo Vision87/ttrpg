@@ -7,11 +7,11 @@ Darwin version:          22.6.0
 Architecture:            x86_64
 Running under Rosetta:   NO
 Available memory:        32768 MB
-Date:                    2026-10-12T05:23:38Z
+Date:                    2026-11-02T18:02:22Z
 [WARNING] The Intel macOS Editor is deprecated; it will no longer be available after Unity 6.7 LTS.
 
 [Licensing::Module] Trying to connect to existing licensing client channel...
-[Licensing::IpcConnector] Successfully connected to: "LicenseClient-vision" at "2026-10-12T05:23:38.971884Z"
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-vision" at "2026-11-02T18:02:22.139893Z"
 
 COMMAND LINE ARGUMENTS:
 /Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/MacOS/Unity
@@ -25,9 +25,9 @@ AssetImportWorkerHW0
 -logFile
 Logs/AssetImportWorkerHW0.log
 -srvPort
-52115
+51557
 -parentPid
-43192
+84250
 -analyticsCloudUserId
 anonymous
 -analyticsLocalProjectId
@@ -45,7 +45,7 @@ eeRmTNIjPcFbbThsQWYCzXCOfz4=
 8
 -asset-garbage-collectors
 1
--nographics
+-force-metal
 -name AssetImport
 Successfully changed project path to: /Users/vision/Documents/src/experiment/UnityClient
 /Users/vision/Documents/src/experiment/UnityClient
@@ -86,12 +86,12 @@ Successfully changed project path to: /Users/vision/Documents/src/experiment/Uni
     "memorysetup-job-temp-allocator-block-size=2097152"
     "memorysetup-job-temp-allocator-block-size-background=1048576"
     "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
-Player connection [140704320211456]  Target information:
+Player connection [140704679361024]  Target information:
 
-Player connection [140704320211456]  * "[IP] 192.168.1.84 [Port] 0 [Flags] 2 [Guid] 3438401977 [EditorId] 3438401977 [Version] 1048832 [Id] OSXEditor(0,iMac-di-Alessio.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+Player connection [140704679361024]  * "[IP] 192.168.1.84 [Port] 0 [Flags] 2 [Guid] 3697083037 [EditorId] 3697083037 [Version] 1048832 [Id] OSXEditor(0,iMac-di-Alessio.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
 
-Player connection [140704320211456] Host joined multi-casting on [225.0.0.222:54997]...
-Player connection [140704320211456] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Player connection [140704679361024] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [140704679361024] Host joined alternative multi-casting on [225.0.0.222:34997]...
 JobSystem: Creating JobQueue using job-worker-count value 3
 Input System module state changed to: Initialized.
 [Physics::Module] Initialized fallback backend.
@@ -116,33 +116,40 @@ Initialize engine version: 6000.6.2f1 (770e33f6875c)
 [EntityIdStore] init: VM path (explicit commit), pageSize=4096, blockCount=1048576, entitiesPerBlock=256, slots reserved=4294967296 bytes
 [Subsystems] Discovering subsystems at path /Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/UnitySubsystems
 [Subsystems] Discovering subsystems at path /Users/vision/Documents/src/experiment/UnityClient/Assets
-Forcing GfxDevice: Null
+Forcing GfxDevice: Metal
 GfxDevice: creating device client; kGfxThreadingModeNonThreaded
-NullGfxDevice:
-    Version:  NULL 1.0 [1.0]
-    Renderer: Null Device
-    Vendor:   Unity Technologies
+iMac preferred device: AMD Radeon Pro 580 (high power)
+Metal devices available: 1
+0: AMD Radeon Pro 580 (high power)
+Using device AMD Radeon Pro 580 (high power)
+Initializing Metal device caps: AMD Radeon Pro 580
+Mac GPU Family: 2
+Apple GPU Family: 0
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
 Initialize mono
 Mono path[0] = '/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/Managed'
 Mono path[1] = '/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/runtime/netstandard2.1'
 Mono path[2] = '/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/lib/mono/unityjit-macos'
 Mono config path = '/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/etc'
-Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56213
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56279
 CodeReloadManager initialized
 Begin MonoManager ReloadAssembly
 Registering precompiled unity dll's ...
 Register platform support module: /Applications/Unity/Hub/Editor/6000.6.2f1/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
 Register platform support module: /Applications/Unity/Hub/Editor/6000.6.2f1/PlaybackEngines/MacStandaloneSupport/UnityEditor.OSXStandalone.Extensions.dll
-Registered in 0.001147 seconds.
+Registered in 0.001238 seconds.
 [Licensing::Client] Handshaking with LicensingClient:
   Version:                 1.18.3+d7ffd15
-  Session Id:              eab9692332ad49ec8cdcfabb4f1ba144
-  Correlation Id:          8712a2e9d1f4e48c21a3c6ceefc0d048
-  External correlation Id: 8423448457956134465
+  Session Id:              6ac2dc027bfd490fb33f50a241c3ddd4
+  Correlation Id:          291d7284fdeda54ea723f892f586315c
+  External correlation Id: 3645105610159350625
   Machine Id:              eeRmTNIjPcFbbThsQWYCzXCOfz4=
-[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-vision" (connect: 0.00s, validation: 0.00s, handshake: 1.04s)
-[Licensing::IpcConnector] Successfully connected to: "LicenseClient-vision-notifications" at "2026-10-12T05:23:40.013067Z"
-[Licensing::Module] Licensing Background thread has ended after 1.04s
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-vision" (connect: 0.00s, validation: 0.02s, handshake: 1.03s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-vision-notifications" at "2026-11-02T18:02:23.189113Z"
+[Licensing::Module] Licensing Background thread has ended after 1.05s
 Native extension for OSXStandalone target not found
 Native extension for WebGL target not found
 Package Manager log level set to [2]
@@ -151,23 +158,23 @@ Package Manager log level set to [2]
 [Package Manager] Cannot connect to Unity Package Manager local server
 ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:False
 Scripting: successfully reloaded assembly
-- Finished resetting the current domain, in  0.621 seconds
-Domain Reload Profiling: 1475ms
-	BeginReloadAssembly (159ms)
+- Finished resetting the current domain, in  0.652 seconds
+Domain Reload Profiling: 1507ms
+	BeginReloadAssembly (148ms)
 	RebuildCommonClasses (8ms)
-	RebuildNativeTypeToScriptingClass (36ms)
-	initialDomainReloadingComplete (100ms)
-	LoadAllAssembliesAndSetupDomain (550ms)
-		LoadAssemblies (157ms)
-		TypeCache.Refresh (410ms)
-			TypeCache.ScanAssembly (390ms)
+	RebuildNativeTypeToScriptingClass (33ms)
+	initialDomainReloadingComplete (103ms)
+	LoadAllAssembliesAndSetupDomain (561ms)
+		LoadAssemblies (147ms)
+		TypeCache.Refresh (426ms)
+			TypeCache.ScanAssembly (405ms)
 		AnalyzeDomain (1ms)
-	FinalizeReload (622ms)
+	FinalizeReload (653ms)
 		SetupLoadedEditorAssemblies (0ms)
 			InitializePlatformSupportModulesInManaged (4ms)
-			BeforeProcessingInitializeOnLoad (153ms)
-			ProcessInitializeOnLoadAttributes (111ms)
-			ProcessInitializeOnLoadMethodAttributes (221ms)
+			BeforeProcessingInitializeOnLoad (154ms)
+			ProcessInitializeOnLoadAttributes (125ms)
+			ProcessInitializeOnLoadMethodAttributes (244ms)
 Initializing Unity extensions:
 [Licensing::Client] Successfully resolved entitlement details
 [Licensing::Module] License group:
@@ -188,35 +195,36 @@ Native extension for WebGL target not found
 [Package Manager] Cannot connect to Unity Package Manager local server
 ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:False
 Scripting: successfully reloaded assembly
-- Finished resetting the current domain, in  0.518 seconds
-Domain Reload Profiling: 1075ms
-	BeginReloadAssembly (283ms)
-		DisableScriptedObjects (10ms)
-		CreateAndSetChildDomain (36ms)
-	RebuildCommonClasses (16ms)
-	RebuildNativeTypeToScriptingClass (37ms)
-	initialDomainReloadingComplete (39ms)
-	LoadAllAssembliesAndSetupDomain (181ms)
-		LoadAssemblies (132ms)
-		TypeCache.Refresh (16ms)
+- Finished resetting the current domain, in  0.514 seconds
+Domain Reload Profiling: 996ms
+	BeginReloadAssembly (240ms)
+		DisableScriptedObjects (9ms)
+		CreateAndSetChildDomain (37ms)
+	RebuildCommonClasses (11ms)
+	RebuildNativeTypeToScriptingClass (21ms)
+	initialDomainReloadingComplete (36ms)
+	LoadAllAssembliesAndSetupDomain (173ms)
+		LoadAssemblies (91ms)
+		TypeCache.Refresh (15ms)
 			TypeCache.ScanAssembly (9ms)
-		AnalyzeDomain (8ms)
+		AnalyzeDomain (9ms)
 			BuildScriptInfoCaches (5ms)
-	FinalizeReload (519ms)
+	FinalizeReload (515ms)
 		SetupLoadedEditorAssemblies (0ms)
 			InitializePlatformSupportModulesInManaged (3ms)
-			BeforeProcessingInitializeOnLoad (157ms)
-			ProcessInitializeOnLoadAttributes (77ms)
-			ProcessInitializeOnLoadMethodAttributes (44ms)
-		AwakeInstancesAfterBackupRestoration (11ms)
+			BeforeProcessingInitializeOnLoad (131ms)
+			ProcessInitializeOnLoadAttributes (82ms)
+			ProcessInitializeOnLoadMethodAttributes (54ms)
+		AwakeInstancesAfterBackupRestoration (10ms)
 AcceleratorClientConnectionCallback - disconnected - :0
-Unloading 1 Unused Serialized files (Serialized files now loaded: 0)
-Unloading 378 unused Assets / (107.8 KB). Loaded Objects now: 1073.
-Memory consumption went from 100.6 MB to 100.5 MB.
-Total: 6.839825 ms (FindLiveObjects: 0.191892 ms CreateObjectMapping: 0.042963 ms MarkObjects: 6.363138 ms  DeleteObjects: 0.144356 ms)
+Launching external process: /Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Helpers/UnityShaderCompiler
+Launched and connected shader compiler UnityShaderCompiler after 0.02 seconds
+Unloading 2 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 384 unused Assets / (109.4 KB). Loaded Objects now: 1087.
+Memory consumption went from 101.5 MB to 101.4 MB.
+Total: 9.240350 ms (FindLiveObjects: 0.195112 ms CreateObjectMapping: 0.043611 ms MarkObjects: 8.580057 ms  DeleteObjects: 0.290030 ms)
 
 Editor requested this worker to shutdown with reason: Editor is closing down
-AssetImportWorkerClient::OnTransportError - code=2 error=End of file
 AcceleratorClientConnectionCallback - disconnected - :0
 AssetImportWorker is now disconnected from the server
 Process exiting

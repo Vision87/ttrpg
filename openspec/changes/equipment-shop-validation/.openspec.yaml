@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Validate equipment against package-defined weight, capacity, and
+  proficiency rules, and prevent stale starting wealth

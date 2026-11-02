@@ -5,8 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 import secrets
 from typing import Any
+import uuid
 
 from character.builder import CharacterBuilder
+from character.equipment import calculate_starting_wealth
 from character.model import Character
 from character.presentation import PresentationProfile
 from character.templates import CharacterTemplate
@@ -30,12 +32,23 @@ class CreationWorkflow:
         *,
         creation_flow: dict[str, Any] | None = None,
         package_versions: dict[str, str] | None = None,
+        equipment_shop: dict[str, Any] | None = None,
     ) -> None:
         self.character_id = character_id
         self.name = name
         self.ruleset_id = ruleset_id
         self.definitions = ruleset_definitions or {}
         self.policy = policy
+        self.equipment_shop = deepcopy(equipment_shop)
+        self.equipment_state: dict[str, Any] = {
+            "wealth_method": None,
+            "wealth_definition_id": None,
+            "starting_wealth": None,
+            "remaining_wealth": None,
+            "wealth_roll": None,
+            "items": [],
+            "template_migration_complete": False,
+        }
 
         if creation_flow is not None:
             steps = creation_flow.get("steps")
@@ -85,6 +98,8 @@ class CreationWorkflow:
         ruleset_definitions: dict[str, dict[str, Any]],
         creation_flow: dict[str, Any],
         policy: str = "guided",
+        *,
+        equipment_shop: dict[str, Any] | None = None,
     ) -> "CreationWorkflow":
         workflow = cls(
             character_id,
@@ -94,6 +109,7 @@ class CreationWorkflow:
             policy,
             creation_flow=creation_flow,
             package_versions=template.package_versions,
+            equipment_shop=equipment_shop,
         )
         workflow.builder = CharacterBuilder.from_template(
             template,
@@ -105,6 +121,7 @@ class CreationWorkflow:
         workflow.presentation = PresentationProfile.from_record(
             workflow.builder.character.presentation
         )
+        workflow.migrate_template_equipment()
         return workflow
 
     @property
@@ -170,6 +187,11 @@ class CreationWorkflow:
             self.builder.character.provenance.setdefault("choices", {})[
                 category
             ] = "user"
+            if (
+                self.equipment_shop is not None
+                and category == self.equipment_shop.get("wealth_definition_type")
+            ):
+                self._refresh_starting_wealth()
         elif field_type == "text":
             if not isinstance(value, str):
                 raise ValueError(f"{field_id} must be text")
@@ -530,6 +552,286 @@ class CreationWorkflow:
             self.current_step_index += 1
         return self.current_step
 
+    def set_current_step(self, step_id: str) -> str:
+        try:
+            step_index = self.steps.index(step_id)
+        except ValueError as error:
+            raise ValueError(f"Unknown creation step: {step_id}") from error
+        self.current_step_index = step_index
+        return step_id
+
+    def choose_starting_wealth(
+        self,
+        method: str,
+        rng: Any | None = None,
+    ) -> dict[str, Any]:
+        if self.equipment_shop is None:
+            raise ValueError("This ruleset does not provide an equipment shop")
+        definition_id, wealth_rule = self._resolve_starting_wealth_definition()
+
+        previous_method = self.equipment_state["wealth_method"]
+        if previous_method is not None:
+            self._refresh_starting_wealth()
+            if previous_method == method:
+                return deepcopy(self.equipment_state)
+            raise ValueError("Starting wealth has already been selected")
+
+        self.migrate_template_equipment()
+        result = calculate_starting_wealth(wealth_rule, method, rng=rng)
+        self.equipment_state.update(
+            {
+                "wealth_method": result["method"],
+                "wealth_definition_id": definition_id,
+                "starting_wealth": result["amount"],
+                "remaining_wealth": result["amount"],
+                "wealth_roll": result["dice"] if result["dice"] else None,
+            }
+        )
+        self._recalculate_remaining_wealth()
+        return deepcopy(self.equipment_state)
+
+    def _resolve_starting_wealth_definition(self) -> tuple[str, dict[str, Any]]:
+        if self.equipment_shop is None:
+            raise ValueError("This ruleset does not provide an equipment shop")
+        wealth_definition_type = self.equipment_shop["wealth_definition_type"]
+        selected = self.builder.character.choices.get(wealth_definition_type, [])
+        if not selected:
+            raise ValueError(
+                f"Choose a {wealth_definition_type} before selecting starting wealth"
+            )
+        definition_id = selected[0]
+        definition = self.definitions.get(definition_id)
+        if definition is None or definition.get("type") != wealth_definition_type:
+            raise ValueError(
+                f"Selected {wealth_definition_type} is not available for starting wealth"
+            )
+        while definition.get("parent_class"):
+            definition_id = definition["parent_class"]
+            definition = self.definitions.get(definition_id)
+            if definition is None or definition.get("type") != wealth_definition_type:
+                raise ValueError("Selected class does not resolve to a wealth rule")
+        wealth_rule = definition.get("starting_wealth")
+        if not isinstance(wealth_rule, dict):
+            raise ValueError(
+                f"Selected {wealth_definition_type} has no starting wealth rule"
+            )
+        return definition_id, wealth_rule
+
+    def _refresh_starting_wealth(self) -> None:
+        method = self.equipment_state.get("wealth_method")
+        if method is None:
+            return
+        definition_id, wealth_rule = self._resolve_starting_wealth_definition()
+        if definition_id == self.equipment_state.get("wealth_definition_id"):
+            return
+        result = calculate_starting_wealth(
+            wealth_rule,
+            method,
+            rng=secrets.SystemRandom(),
+        )
+        self.equipment_state.update(
+            {
+                "wealth_definition_id": definition_id,
+                "starting_wealth": result["amount"],
+                "wealth_roll": result["dice"] if result["dice"] else None,
+            }
+        )
+        self._recalculate_remaining_wealth()
+
+    def migrate_template_equipment(self) -> None:
+        if self.equipment_state.get("template_migration_complete"):
+            return
+        self.equipment_state["template_migration_complete"] = True
+        legacy_items = list(self.builder.character.choices.get("equipment", []))
+        if not legacy_items:
+            return
+        items = list(self.equipment_state.get("items", []))
+        if not items:
+            for idx, item_id in enumerate(legacy_items):
+                items.append({
+                    "instance_id": f"migrated-{idx + 1}-{item_id}",
+                    "item_id": item_id,
+                    "slot": None,
+                })
+            self.equipment_state["items"] = items
+        self._recalculate_remaining_wealth()
+
+    def _recalculate_remaining_wealth(self) -> None:
+        starting = self.equipment_state.get("starting_wealth")
+        if starting is None:
+            return
+        spent = sum(
+            self.definitions.get(item["item_id"], {}).get("cost", 0)
+            for item in self.equipment_state.get("items", [])
+        )
+        self.equipment_state["remaining_wealth"] = starting - spent
+
+    def purchase_item(self, item_id: str) -> dict[str, Any]:
+        if self.equipment_shop is None:
+            raise ValueError("This ruleset does not provide an equipment shop")
+        if self.equipment_state.get("starting_wealth") is None:
+            raise ValueError("Select starting wealth before purchasing equipment")
+        definition = self.definitions.get(item_id)
+        if not definition or definition.get("type") != "item":
+            raise ValueError(f"Unknown or invalid equipment item: {item_id}")
+        cost = definition.get("cost", 0)
+        if not isinstance(cost, (int, float)) or cost < 0:
+            raise ValueError(f"Invalid item cost: {cost}")
+        remaining = self.equipment_state.get("remaining_wealth", 0)
+        if remaining < cost:
+            raise ValueError(
+                f"Insufficient funds: item costs {cost} but only {remaining} available"
+            )
+        instance = {
+            "instance_id": f"item-{uuid.uuid4().hex[:8]}",
+            "item_id": item_id,
+            "slot": None,
+        }
+        self.equipment_state["items"].append(instance)
+        self.equipment_state["remaining_wealth"] = remaining - cost
+        return deepcopy(self.equipment_state)
+
+    def equip_item(self, instance_id: str, slot: str) -> dict[str, Any]:
+        if not isinstance(instance_id, str) or not isinstance(slot, str):
+            raise ValueError("instance_id and slot must be strings")
+        candidate = deepcopy(self.equipment_state)
+        items = candidate.get("items", [])
+        target = next(
+            (item for item in items if item.get("instance_id") == instance_id),
+            None,
+        )
+        if target is None:
+            raise ValueError(f"Owned item instance not found: {instance_id}")
+        target["slot"] = slot
+        errors = self._equipment_rule_errors(candidate)
+        if errors:
+            raise ValueError(errors[0])
+        self.equipment_state = candidate
+        return deepcopy(candidate)
+
+    def _equipment_rule_errors(
+        self,
+        equipment_state: dict[str, Any] | None = None,
+    ) -> list[str]:
+        state = equipment_state or self.equipment_state
+        items = state.get("items", [])
+        if not items:
+            return []
+        if self.equipment_shop is None:
+            return ["This ruleset does not provide equipment validation rules"]
+
+        errors: list[str] = []
+        try:
+            wealth_definition_id, _ = self._resolve_starting_wealth_definition()
+        except ValueError as error:
+            errors.append(str(error))
+            wealth_definition_id = ""
+        wealth_definition = self.definitions.get(wealth_definition_id, {})
+        proficient_groups = set(
+            wealth_definition.get("equipment_proficiencies", [])
+        )
+
+        encumbrance = self.equipment_shop["encumbrance"]
+        attribute = encumbrance["attribute"]
+        score = self.builder.character.abilities.get(attribute)
+        capacity: int | float | None = None
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
+            errors.append(
+                f"Cannot determine carrying capacity: {attribute} has not been assigned"
+            )
+        elif "capacity_by_attribute" in encumbrance:
+            capacity = encumbrance["capacity_by_attribute"].get(str(int(score)))
+            if capacity is None:
+                errors.append(
+                    f"No carrying capacity is defined for {attribute} {score}"
+                )
+        else:
+            capacity = score * encumbrance["capacity_multiplier"]
+        size_multipliers = encumbrance.get("size_multipliers")
+        if capacity is not None and size_multipliers:
+            race_choices = self.builder.character.choices.get("race", [])
+            race_definition = (
+                self.definitions.get(race_choices[0], {}) if race_choices else {}
+            )
+            while race_definition.get("parent_race"):
+                race_definition = self.definitions.get(
+                    race_definition["parent_race"], {}
+                )
+            size = race_definition.get("size", "medium")
+            size_multiplier = size_multipliers.get(size)
+            if size_multiplier is None:
+                errors.append(f"No carrying-capacity modifier is defined for size {size}")
+            else:
+                capacity *= size_multiplier
+
+        total_weight: int | float = 0
+        occupied_slots: set[str] = set()
+        has_two_handed = False
+        has_hand_item = False
+        for item in items:
+            item_id = item.get("item_id")
+            definition = self.definitions.get(item_id, {})
+            if definition.get("type") != "item":
+                errors.append(f"Item definition not found: {item_id}")
+                continue
+            weight = definition.get("weight")
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                errors.append(f"Item {item_id} has no valid weight")
+            else:
+                total_weight += weight
+
+            slot = item.get("slot")
+            if slot is None:
+                continue
+            if slot not in definition.get("equipment_slots", []):
+                errors.append(f"Item {item_id} is not compatible with slot {slot}")
+            if slot in occupied_slots:
+                errors.append(f"Slot {slot} is already occupied")
+            occupied_slots.add(slot)
+            if slot == "two_handed":
+                has_two_handed = True
+            elif slot in ("main_hand", "off_hand"):
+                has_hand_item = True
+
+            if definition.get("proficiency") and (
+                definition["proficiency"] not in proficient_groups
+            ):
+                errors.append(
+                    f"Not proficient with {item_id}: "
+                    f"{definition['proficiency']}"
+                )
+            for stat, minimum in definition.get(
+                "min_characteristic", {}
+            ).items():
+                actual = self.builder.character.abilities.get(stat, 0)
+                if actual < minimum:
+                    errors.append(
+                        f"Unmet equipment prerequisite for {item_id}: "
+                        f"{stat} {actual} < {minimum}"
+                    )
+
+        if has_two_handed and has_hand_item:
+            errors.append(
+                "Cannot equip two-handed item while hands are occupied"
+            )
+        if capacity is not None and total_weight > capacity:
+            errors.append(
+                f"Encumbrance limit exceeded: total weight {total_weight} "
+                f"exceeds carrying capacity {capacity} "
+                f"{encumbrance['weight_unit']}"
+            )
+        return errors
+
+    def unequip_item(self, instance_id: str) -> dict[str, Any]:
+        if not isinstance(instance_id, str):
+            raise ValueError("instance_id must be a string")
+        items = self.equipment_state.get("items", [])
+        target = next((item for item in items if item.get("instance_id") == instance_id), None)
+        if target is None:
+            raise ValueError(f"Owned item instance not found: {instance_id}")
+        target["slot"] = None
+        return deepcopy(self.equipment_state)
+
     def validate(self) -> list[dict[str, str]]:
         issues: list[dict[str, str]] = []
         for step in self.flow["steps"]:
@@ -689,6 +991,28 @@ class CreationWorkflow:
         issues = list(self.validate())
         issues.extend(
             {
+                "code": "invalid-equipment",
+                "severity": "error",
+                "path": "equipment_state",
+                "message": message,
+            }
+            for message in self._equipment_rule_errors()
+        )
+        remaining_wealth = self.equipment_state.get("remaining_wealth")
+        if remaining_wealth is not None and remaining_wealth < 0:
+            issues.append(
+                {
+                    "code": "equipment-budget-exceeded",
+                    "severity": "error",
+                    "path": "equipment_state.remaining_wealth",
+                    "message": (
+                        f"Equipment spending exceeds starting wealth by "
+                        f"{-remaining_wealth}"
+                    ),
+                }
+            )
+        issues.extend(
+            {
                 "code": issue.code,
                 "severity": issue.severity,
                 "path": issue.path,
@@ -737,6 +1061,7 @@ class CreationWorkflow:
             "overrides": deepcopy(character.overrides),
             "provenance": deepcopy(character.provenance),
             "presentation": self.presentation.to_record(),
+            "equipment_state": deepcopy(self.equipment_state),
         }
 
     def to_draft_record(self) -> dict[str, Any]:
@@ -755,6 +1080,7 @@ class CreationWorkflow:
             "presentation": self.presentation.to_record(),
             "derived": deepcopy(character.derived),
             "provenance": deepcopy(character.provenance),
+            "equipment_state": deepcopy(self.equipment_state),
             "template_id": self.builder.template_id,
             "template_values": deepcopy(self.builder.template_values),
             "ability_rolls": deepcopy(self.ability_rolls),
@@ -769,6 +1095,7 @@ class CreationWorkflow:
         ruleset_definitions: dict[str, dict[str, Any]],
         creation_flow: dict[str, Any],
         package_versions: dict[str, str],
+        equipment_shop: dict[str, Any] | None = None,
     ) -> "CreationWorkflow":
         if record.get("package_versions") != package_versions:
             raise ValueError("Draft package versions do not match the resolved packages")
@@ -780,6 +1107,7 @@ class CreationWorkflow:
             policy=record["policy"],
             creation_flow=creation_flow,
             package_versions=package_versions,
+            equipment_shop=equipment_shop,
         )
         step_index = record.get("current_step_index")
         if not isinstance(step_index, int) or not 0 <= step_index <= len(workflow.steps):
@@ -813,10 +1141,15 @@ class CreationWorkflow:
             record.get("presentation", {})
         )
         workflow.current_step_index = step_index
+        workflow.equipment_state = deepcopy(
+            record.get("equipment_state", workflow.equipment_state)
+        )
         workflow.ability_rolls = deepcopy(record.get("ability_rolls", {}))
         workflow.ability_roll_events = deepcopy(
             record.get("ability_roll_events", [])
         )
+        workflow._refresh_starting_wealth()
+        workflow.migrate_template_equipment()
         return workflow
 
     def finalize(self) -> Character:
@@ -828,5 +1161,6 @@ class CreationWorkflow:
             )
         char = self.builder.finalize()
         char.presentation = self.presentation.to_record()
+        char.equipment_state = deepcopy(self.equipment_state)
         char.recalculate(self.definitions)
         return char

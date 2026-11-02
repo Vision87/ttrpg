@@ -183,6 +183,76 @@ class CharacterCreationApplication:
                 workflow.advance_step()
                 self.store.save_draft(workflow)
                 return 200, self._draft_payload(workflow)
+            if len(suffix) == 2 and suffix[1] == "step" and method == "POST":
+                if set(body) != {"step_id"}:
+                    raise ValueError("Step selection requests accept only step_id")
+                step_id = body.get("step_id")
+                if not isinstance(step_id, str):
+                    raise ValueError("step_id must be a string")
+                workflow.set_current_step(step_id)
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 3
+                and suffix[1:] == ["equipment", "wealth"]
+                and method == "POST"
+            ):
+                if set(body) != {"method"}:
+                    raise ValueError(
+                        "Starting wealth requests accept only method"
+                    )
+                wealth_method = body.get("method")
+                if not isinstance(wealth_method, str):
+                    raise ValueError("method must be roll or average")
+                workflow.choose_starting_wealth(wealth_method)
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 3
+                and suffix[1:] == ["equipment", "purchase"]
+                and method == "POST"
+            ):
+                if set(body) != {"item_id"}:
+                    raise ValueError(
+                        "Purchase requests accept only item_id"
+                    )
+                item_id = body.get("item_id")
+                if not isinstance(item_id, str):
+                    raise ValueError("item_id must be a string")
+                workflow.purchase_item(item_id)
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 3
+                and suffix[1:] == ["equipment", "equip"]
+                and method == "POST"
+            ):
+                if set(body) != {"instance_id", "slot"}:
+                    raise ValueError(
+                        "Equip requests accept only instance_id and slot"
+                    )
+                instance_id = body.get("instance_id")
+                slot = body.get("slot")
+                if not isinstance(instance_id, str) or not isinstance(slot, str):
+                    raise ValueError("instance_id and slot must be strings")
+                workflow.equip_item(instance_id, slot)
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 3
+                and suffix[1:] == ["equipment", "unequip"]
+                and method == "POST"
+            ):
+                if set(body) != {"instance_id"}:
+                    raise ValueError(
+                        "Unequip requests accept only instance_id"
+                    )
+                instance_id = body.get("instance_id")
+                if not isinstance(instance_id, str):
+                    raise ValueError("instance_id must be a string")
+                workflow.unequip_item(instance_id)
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
             if len(suffix) == 2 and suffix[1] == "review" and method == "POST":
                 return 200, workflow.review()
             if len(suffix) == 2 and suffix[1] == "finalize" and method == "POST":
@@ -305,6 +375,7 @@ class CharacterCreationApplication:
                 policy,
                 creation_flow=manifest["creation_flow"],
                 package_versions=versions,
+                equipment_shop=manifest.get("equipment_shop"),
             )
         template_definition = definitions.get(template_id)
         if (
@@ -331,6 +402,7 @@ class CharacterCreationApplication:
             definitions,
             manifest["creation_flow"],
             policy,
+            equipment_shop=manifest.get("equipment_shop"),
         )
 
     def _load_workflow(self, draft_id: str) -> CreationWorkflow:
@@ -353,6 +425,7 @@ class CharacterCreationApplication:
             ruleset_definitions=definitions,
             creation_flow=manifest["creation_flow"],
             package_versions=versions,
+            equipment_shop=manifest.get("equipment_shop"),
         )
 
     def _available_versions(self, requested: dict[str, str]) -> dict[str, str]:
@@ -439,11 +512,34 @@ class CharacterCreationApplication:
                         value["number_value"] = presentation.get("scale", 1.0)
                         value["is_number"] = True
                 field_values.append(value)
+        catalog: list[dict[str, Any]] = []
+        if workflow.equipment_shop is not None:
+            for def_id, item_def in sorted(definitions.items()):
+                if item_def.get("type") == "item":
+                    catalog.append(
+                        {
+                            "id": def_id,
+                            "name": item_def.get("name", def_id),
+                            "cost": item_def.get("cost", 0),
+                            "description": item_def.get("description", ""),
+                            "equipment_slots": list(item_def.get("equipment_slots", [])),
+                            "image_asset": item_def.get("image_asset", ""),
+                        }
+                    )
         return {
             "draft": record,
             "current_step": workflow.current_step,
             "field_values": field_values,
             "review": workflow.review(),
+            "equipment_shop": (
+                {
+                    **deepcopy(workflow.equipment_shop),
+                    "catalog": catalog,
+                    "state": deepcopy(workflow.equipment_state),
+                }
+                if workflow.equipment_shop is not None
+                else None
+            ),
             "theme": flow_payload["theme"],
         }
 

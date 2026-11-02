@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from rules.schema import DefinitionValidationError, validate_definition, validate_ruleset_package
 
 
@@ -91,3 +93,182 @@ def test_invalid_dice_model_rejected() -> None:
     else:
         raise AssertionError("expected unsupported dice model error")
 
+
+def test_equipment_shop_package_validates_currency_wealth_and_items() -> None:
+    package = {
+        "id": "equipment-test",
+        "version": "1.0.0",
+        "equipment_shop": {
+            "currency": {
+                "id": "gold",
+                "name": "Gold Piece",
+                "abbreviation": "gp",
+            },
+            "wealth_definition_type": "class",
+            "data_status": "verified",
+            "source_references": ["https://rules.example.test/equipment"],
+            "encumbrance": {
+                "attribute": "strength",
+                "weight_unit": "lb",
+                "capacity_by_attribute": {"10": 33},
+            },
+        },
+        "definitions": {
+            "class.fighter": {
+                "id": "class.fighter",
+                "type": "class",
+                "name": "Fighter",
+                "equipment_proficiencies": ["simple", "martial"],
+                "starting_wealth": {
+                    "dice_count": 4,
+                    "die_sides": 4,
+                    "multiplier": 10,
+                },
+            },
+            "item.sword": {
+                "id": "item.sword",
+                "type": "item",
+                "name": "Sword",
+                "description": "A simple sword.",
+                "cost": 15,
+                "weight": 4,
+                "proficiency": "martial",
+                "equipment_slots": ["main_hand", "off_hand"],
+                "image_asset": "item.sword@1",
+            },
+        },
+    }
+    validate_ruleset_package(package)
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"]["image_asset"] = (
+        "https://example.test/sword.png"
+    )
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "local asset reference" in str(error)
+    else:
+        raise AssertionError("expected remote item artwork reference rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["class.fighter"].pop("starting_wealth")
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "starting_wealth" in str(error)
+    else:
+        raise AssertionError("expected missing starting wealth rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"]["cost"] = -1
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "cost must be a non-negative number" in str(error)
+    else:
+        raise AssertionError("expected invalid item cost rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"].pop("weight")
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "weight must be a non-negative number" in str(error)
+    else:
+        raise AssertionError("expected missing item weight rejection")
+
+    invalid_package = deepcopy(package)
+    invalid_package["equipment_shop"]["encumbrance"]["capacity_multiplier"] = 2
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "exactly one of capacity_by_attribute or capacity_multiplier" in str(error)
+    else:
+        raise AssertionError("expected ambiguous encumbrance rule rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"]["proficiency"] = "exotic"
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "declared equipment proficiency group" in str(error)
+    else:
+        raise AssertionError("expected undeclared proficiency rejection")
+
+
+def test_equipment_shop_requires_provenance_for_verified_and_provisional_data() -> None:
+    package = {
+        "id": "equipment-test",
+        "version": "1.0.0",
+        "equipment_shop": {
+            "currency": {
+                "id": "throne",
+                "name": "Throne",
+                "abbreviation": "Thrones",
+            },
+            "wealth_definition_type": "career",
+            "data_status": "provisional",
+            "encumbrance": {
+                "attribute": "strength",
+                "weight_unit": "kg",
+                "capacity_multiplier": 2,
+            },
+        },
+        "definitions": {
+            "career.guard": {
+                "id": "career.guard",
+                "type": "career",
+                "equipment_proficiencies": ["basic_ranged"],
+                "starting_wealth": {
+                    "dice_count": 1,
+                    "die_sides": 10,
+                    "multiplier": 10,
+                },
+            },
+            "item.weapon": {
+                "id": "item.weapon",
+                "type": "item",
+                "name": "Weapon",
+                "description": "A provisional item.",
+                "cost": 1,
+                "weight": 1,
+                "proficiency": "basic_ranged",
+                "equipment_slots": ["main_hand"],
+            },
+        },
+    }
+    try:
+        validate_ruleset_package(package)
+    except DefinitionValidationError as error:
+        assert "data_note" in str(error)
+    else:
+        raise AssertionError("expected provisional data note requirement")
+
+    package["equipment_shop"]["data_note"] = "Values require verification."
+    validate_ruleset_package(package)

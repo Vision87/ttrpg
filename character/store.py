@@ -42,6 +42,7 @@ class CharacterStore:
             record.get("provenance", {}),
             record.get("ruleset_id"),
             record.get("skill_ranks", {}),
+            record.get("equipment_state", {}),
         )
         return character, record["revision"]
 
@@ -163,6 +164,7 @@ class CharacterStore:
             record.get("provenance", {}),
             record.get("ruleset_id"),
             record.get("skill_ranks", {}),
+            record.get("equipment_state", {}),
         )
 
     @staticmethod

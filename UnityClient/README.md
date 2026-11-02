@@ -49,6 +49,19 @@ showing only currently eligible feats. Feat titles and prerequisite metadata
 are sourced from the [D&D 3.5 SRD feat list](https://www.d20srd.org/srd/feats.htm);
 unmodeled prerequisite types are conservatively marked unavailable.
 
+### Step summary header
+
+The character creation flow includes an ordered step summary header displayed directly
+above the navigation bar (`StepSummaryHeader.cs`). Its purpose is to give users a clear
+overview of the sequence of actions in character creation.
+- Step titles can be configured via the `StepSummaryData.asset` ScriptableObject
+  (`UnityClient/Assets/Data/StepSummaryData.asset`).
+- The component dynamically updates when the step list changes at runtime without
+  requiring an application restart.
+- On screens narrower than 600 px, `ResponsiveStepHeader` automatically stacks step
+  items vertically.
+
+
 This first path is local solo play on the configured starter session. It does
 not provide online multiplayer, in-app ruleset authoring, board selection, or
 player-adjustable application themes. Package-provided themes are applied to

@@ -1,7 +1,4 @@
-"""Reusable character profile and derived-statistic model."""
-
-from __future__ import annotations
-
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +19,7 @@ class Character:
     provenance: dict[str, Any] = field(default_factory=dict)
     ruleset_id: str | None = None
     skill_ranks: dict[str, float] = field(default_factory=dict)
+    equipment_state: dict[str, Any] = field(default_factory=dict)
 
     def recalculate(self, ruleset_definitions: dict[str, dict[str, Any]] | None = None) -> None:
         package_ids = set(self.package_versions)
@@ -54,4 +52,5 @@ class Character:
                 for key, value in self.provenance.items()
             },
             "ruleset_id": self.ruleset_id,
+            "equipment_state": deepcopy(self.equipment_state),
         }

@@ -70,6 +70,16 @@ THEME_ASSET_SLOTS = {
 THEME_UI_ASSET_SLOTS = THEME_ASSET_SLOTS
 _THEME_COLOR = re.compile(r"^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$")
 _THEME_ASSET_REF = re.compile(r"^[A-Za-z0-9._:-]+@[1-9][0-9]*$")
+_LOCAL_ASSET_REF = re.compile(r"^[A-Za-z0-9._:-]+@[1-9][0-9]*$")
+EQUIPMENT_SLOTS = {
+    "main_hand",
+    "off_hand",
+    "two_handed",
+    "body",
+    "head",
+    "feet",
+    "accessory",
+}
 
 
 def validate_ruleset_package(package_data: dict[str, Any]) -> None:
@@ -158,6 +168,10 @@ def validate_ruleset_package(package_data: dict[str, Any]) -> None:
                     f"{def_key}.class_skills must reference package skill definitions"
                 )
 
+    equipment_shop = package_data.get("equipment_shop")
+    if equipment_shop is not None:
+        validate_equipment_shop(equipment_shop, definitions)
+
     creation_flow = package_data.get("creation_flow")
     if creation_flow is not None:
         validate_creation_flow(creation_flow, definitions)
@@ -167,6 +181,285 @@ def validate_ruleset_package(package_data: dict[str, Any]) -> None:
     theme = package_data.get("theme")
     if theme is not None:
         validate_theme_profile(theme)
+
+
+def validate_equipment_shop(
+    equipment_shop: Any,
+    definitions: dict[str, Any],
+) -> None:
+    if not isinstance(equipment_shop, dict):
+        raise DefinitionValidationError("equipment_shop must be an object")
+    if set(equipment_shop) - {
+        "currency",
+        "wealth_definition_type",
+        "data_status",
+        "source_references",
+        "data_note",
+        "encumbrance",
+    }:
+        raise DefinitionValidationError("equipment_shop contains unsupported fields")
+
+    encumbrance = equipment_shop.get("encumbrance")
+    if not isinstance(encumbrance, dict) or set(encumbrance) - {
+        "attribute",
+        "weight_unit",
+        "capacity_by_attribute",
+        "capacity_multiplier",
+        "size_multipliers",
+    }:
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance must declare a supported capacity rule"
+        )
+    attribute = encumbrance.get("attribute")
+    if not isinstance(attribute, str) or not attribute.strip():
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance.attribute must be a non-empty string"
+        )
+    weight_unit = encumbrance.get("weight_unit")
+    if not isinstance(weight_unit, str) or not weight_unit.strip():
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance.weight_unit must be a non-empty string"
+        )
+    capacity_by_attribute = encumbrance.get("capacity_by_attribute")
+    capacity_multiplier = encumbrance.get("capacity_multiplier")
+    if (capacity_by_attribute is None) == (capacity_multiplier is None):
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance must declare exactly one of "
+            "capacity_by_attribute or capacity_multiplier"
+        )
+    if capacity_by_attribute is not None:
+        if not isinstance(capacity_by_attribute, dict) or not capacity_by_attribute:
+            raise DefinitionValidationError(
+                "equipment_shop.encumbrance.capacity_by_attribute must be a non-empty object"
+            )
+        for score, capacity in capacity_by_attribute.items():
+            try:
+                parsed_score = int(score)
+            except (TypeError, ValueError) as error:
+                raise DefinitionValidationError(
+                    "equipment_shop.encumbrance.capacity_by_attribute keys must be integers"
+                ) from error
+            if str(parsed_score) != score or parsed_score < 0:
+                raise DefinitionValidationError(
+                    "equipment_shop.encumbrance.capacity_by_attribute keys must be non-negative integers"
+                )
+            if (
+                isinstance(capacity, bool)
+                or not isinstance(capacity, (int, float))
+                or capacity <= 0
+            ):
+                raise DefinitionValidationError(
+                    "equipment_shop.encumbrance capacities must be positive numbers"
+                )
+    elif (
+        isinstance(capacity_multiplier, bool)
+        or not isinstance(capacity_multiplier, (int, float))
+        or capacity_multiplier <= 0
+    ):
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance.capacity_multiplier must be a positive number"
+        )
+    size_multipliers = encumbrance.get("size_multipliers")
+    if size_multipliers is not None and (
+        not isinstance(size_multipliers, dict)
+        or not size_multipliers
+        or any(
+            not isinstance(size, str)
+            or not size.strip()
+            or isinstance(multiplier, bool)
+            or not isinstance(multiplier, (int, float))
+            or multiplier <= 0
+            for size, multiplier in size_multipliers.items()
+        )
+    ):
+        raise DefinitionValidationError(
+            "equipment_shop.encumbrance.size_multipliers must map sizes to positive numbers"
+        )
+
+    currency = equipment_shop.get("currency")
+    if not isinstance(currency, dict) or set(currency) != {
+        "id",
+        "name",
+        "abbreviation",
+    }:
+        raise DefinitionValidationError(
+            "equipment_shop.currency must declare id, name, and abbreviation"
+        )
+    for field_name in ("id", "name", "abbreviation"):
+        value = currency.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            raise DefinitionValidationError(
+                f"equipment_shop.currency.{field_name} must be a non-empty string"
+            )
+
+    wealth_definition_type = equipment_shop.get("wealth_definition_type")
+    if wealth_definition_type not in {"class", "career"}:
+        raise DefinitionValidationError(
+            "equipment_shop.wealth_definition_type must be class or career"
+        )
+
+    data_status = equipment_shop.get("data_status")
+    if data_status not in {"verified", "provisional"}:
+        raise DefinitionValidationError(
+            "equipment_shop.data_status must be verified or provisional"
+        )
+    source_references = equipment_shop.get("source_references", [])
+    if not isinstance(source_references, list) or not all(
+        isinstance(reference, str)
+        and reference.startswith("https://")
+        for reference in source_references
+    ):
+        raise DefinitionValidationError(
+            "equipment_shop.source_references must contain HTTPS URLs"
+        )
+    if data_status == "verified" and not source_references:
+        raise DefinitionValidationError(
+            "Verified equipment_shop data requires source_references"
+        )
+    data_note = equipment_shop.get("data_note")
+    if data_status == "provisional" and (
+        not isinstance(data_note, str) or not data_note.strip()
+    ):
+        raise DefinitionValidationError(
+            "Provisional equipment_shop data requires a data_note"
+        )
+
+    wealth_definitions = [
+        (definition_id, definition)
+        for definition_id, definition in definitions.items()
+        if definition.get("type") == wealth_definition_type
+        and not definition.get("_disabled", False)
+        and not definition.get("parent_class")
+    ]
+    if not wealth_definitions:
+        raise DefinitionValidationError(
+            "equipment_shop.wealth_definition_type has no available package definitions"
+        )
+    proficiency_groups: set[str] = set()
+    for definition_id, definition in wealth_definitions:
+        equipment_proficiencies = definition.get("equipment_proficiencies")
+        if (
+            not isinstance(equipment_proficiencies, list)
+            or not all(
+                isinstance(group, str) and group.strip()
+                for group in equipment_proficiencies
+            )
+            or len(set(equipment_proficiencies)) != len(equipment_proficiencies)
+        ):
+            raise DefinitionValidationError(
+                f"definitions.{definition_id}.equipment_proficiencies must be a list "
+                "of unique non-empty strings"
+            )
+        proficiency_groups.update(equipment_proficiencies)
+
+        starting_wealth = definition.get("starting_wealth")
+        path = f"definitions.{definition_id}.starting_wealth"
+        if not isinstance(starting_wealth, dict) or set(starting_wealth) - {
+            "dice_count",
+            "die_sides",
+            "multiplier",
+            "base",
+        }:
+            raise DefinitionValidationError(
+                f"{path} must declare a supported dice formula"
+            )
+        dice_count = starting_wealth.get("dice_count")
+        die_sides = starting_wealth.get("die_sides")
+        if (
+            isinstance(dice_count, bool)
+            or not isinstance(dice_count, int)
+            or not 1 <= dice_count <= 20
+        ):
+            raise DefinitionValidationError(
+                f"{path}.dice_count must be an integer from 1 to 20"
+            )
+        if (
+            isinstance(die_sides, bool)
+            or not isinstance(die_sides, int)
+            or not 2 <= die_sides <= 100
+        ):
+            raise DefinitionValidationError(
+                f"{path}.die_sides must be an integer from 2 to 100"
+            )
+        multiplier = starting_wealth.get("multiplier")
+        if (
+            isinstance(multiplier, bool)
+            or not isinstance(multiplier, (int, float))
+            or multiplier <= 0
+        ):
+            raise DefinitionValidationError(
+                f"{path}.multiplier must be a positive number"
+            )
+        base = starting_wealth.get("base", 0)
+        if (
+            isinstance(base, bool)
+            or not isinstance(base, (int, float))
+            or base < 0
+        ):
+            raise DefinitionValidationError(
+                f"{path}.base must be a non-negative number"
+            )
+
+    item_definitions = [
+        (definition_id, definition)
+        for definition_id, definition in definitions.items()
+        if definition.get("type") == "item"
+        and not definition.get("_disabled", False)
+    ]
+    if not item_definitions:
+        raise DefinitionValidationError(
+            "equipment_shop requires at least one available item definition"
+        )
+    for definition_id, definition in item_definitions:
+        path = f"definitions.{definition_id}"
+        name = definition.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise DefinitionValidationError(f"{path}.name is required for the shop")
+        description = definition.get("description")
+        if not isinstance(description, str) or not description.strip():
+            raise DefinitionValidationError(
+                f"{path}.description is required for the shop"
+            )
+        weight = definition.get("weight")
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or weight < 0
+        ):
+            raise DefinitionValidationError(
+                f"{path}.weight must be a non-negative number"
+            )
+        proficiency = definition.get("proficiency")
+        if proficiency is not None and (
+            not isinstance(proficiency, str)
+            or proficiency not in proficiency_groups
+        ):
+            raise DefinitionValidationError(
+                f"{path}.proficiency must reference a declared equipment proficiency group"
+            )
+        cost = definition.get("cost")
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)) or cost < 0:
+            raise DefinitionValidationError(
+                f"{path}.cost must be a non-negative number"
+            )
+        slots = definition.get("equipment_slots")
+        if (
+            not isinstance(slots, list)
+            or not slots
+            or not all(isinstance(slot, str) and slot in EQUIPMENT_SLOTS for slot in slots)
+            or len(set(slots)) != len(slots)
+        ):
+            raise DefinitionValidationError(
+                f"{path}.equipment_slots must contain unique supported slots"
+            )
+        image_asset = definition.get("image_asset")
+        if image_asset is not None and (
+            not isinstance(image_asset, str)
+            or not _LOCAL_ASSET_REF.fullmatch(image_asset)
+        ):
+            raise DefinitionValidationError(
+                f"{path}.image_asset must use the local asset reference format id@revision"
+            )
 
 
 def validate_creation_flow(

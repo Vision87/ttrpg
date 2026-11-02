@@ -15,6 +15,8 @@ TESTS = [
         "test_invalid_definition_reports_field",
         "test_generalized_ruleset_package_dice_models",
         "test_invalid_dice_model_rejected",
+        "test_equipment_shop_package_validates_currency_wealth_and_items",
+        "test_equipment_shop_requires_provenance_for_verified_and_provisional_data",
     ]),
     ("creation_flow_schema_test", [
         "test_package_creation_flow_and_theme_validate",
@@ -39,6 +41,12 @@ TESTS = [
         "test_creation_service_rolls_and_rerolls_ability_score_groups_atomically",
         "test_creation_service_group_roll_failure_preserves_existing_scores",
         "test_individual_roll_requires_score_group_configuration",
+        "test_creation_service_selects_and_persists_starting_wealth",
+        "test_creation_service_equipment_migration_and_persistence",
+        "test_creation_service_equipment_purchase_equip_and_unequip_operations",
+        "test_equipment_rules_reject_overweight_and_revalidate_proficiency",
+        "test_equipment_wealth_recalculates_for_changed_class_and_preserves_inventory",
+        "test_equipment_wealth_recalculates_after_dark_heresy_career_change",
     ]),
     ("webgl_service_server_test", [
         "test_webgl_server_serves_api_static_files_and_gzip_headers",
@@ -59,7 +67,11 @@ TESTS = [
     ("template_test", ["test_template_application_is_a_copy", "test_personal_template_preserves_creation_inputs_not_campaign_state"]),
     ("builder_test", ["test_beginner_builder_starts_from_template", "test_expert_builder_requires_a_valid_draft"]),
     ("expert_builder_test", ["test_homebrew_policy_exposes_prerequisite_warning"]),
-    ("equipment_test", ["test_equipment_budget_and_proficiency", "test_loadout_is_named_and_reusable"]),
+    ("equipment_test", [
+        "test_equipment_budget_and_proficiency",
+        "test_loadout_is_named_and_reusable",
+        "test_starting_wealth_calculates_average_and_service_roll",
+    ]),
     ("presentation_test", ["test_presentation_profile_updates_without_rules_data"]),
     ("character_store_test", [
         "test_character_round_trip_preserves_revision_and_references",
@@ -101,6 +113,9 @@ TESTS = [
         "test_unity_client_renders_package_flows_and_ruleset_themes_generically",
         "test_theme_surfaces_and_board_frame_adapt_without_changing_play_surface",
         "test_feat_detail_pane_separates_inspection_from_selection",
+        "test_step_navigation_saves_before_switch_and_preserves_sequential_flow",
+        "test_equipment_shop_client_contract_dtos",
+        "test_equipment_shop_ui_rendering_and_interaction_contracts",
     ]),
     ("multimedia_presentation_test", [
         "test_presentation_event_mapping_registry",
@@ -133,6 +148,12 @@ TESTS = [
     ("platform_e2e_integration_test", [
         "test_e2e_solo_session_ingestion_and_ai_combat",
         "test_e2e_multi_user_session_synchronization_and_fog_of_war",
+    ]),
+    ("step_summary_header_test", [
+        "test_step_summary_data_asset_contains_expected_steps",
+        "test_character_creation_step_summary_header_presence",
+        "test_step_summary_header_updates_when_steps_change",
+        "test_step_summary_header_highlights_current_step_and_summarizes_selections",
     ]),
 ]
 

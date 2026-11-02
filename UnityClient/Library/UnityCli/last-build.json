@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "target": "WebGL",
-  "outputPath": "/Users/vision/Documents/src/experiment/UnityClient/Build/WebGL",
+  "outputPath": "/tmp/experiment-mobile-ui-build",
   "architecture": "x86_64",
   "editorVersion": "6000.6.2f1",
-  "recordedAt": "2026-10-12T06:19:42.113Z"
+  "recordedAt": "2026-11-02T14:08:16.350Z"
 }

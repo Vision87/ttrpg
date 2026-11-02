@@ -3,6 +3,21 @@
   "version": "1.0.0",
   "dice_model": "d100_roll_under",
   "dependencies": {},
+  "equipment_shop": {
+    "currency": {"id": "throne", "name": "Throne Gelt", "abbreviation": "Thrones"},
+    "wealth_definition_type": "career",
+    "data_status": "provisional",
+    "source_references": [
+      "https://companyofthedamned.blogspot.com/2013/04/dark-heresy-rpg-character-creation.html",
+      "https://warhammer40k.fandom.com/wiki/Throne_Gelt"
+    ],
+    "data_note": "Career starting-wealth formulas, item prices, weights, carrying capacity, and proficiency requirements are provisional examples for UI testing, not verified Dark Heresy 1st-edition rules values. Replace them with the Core Rulebook rules when available.",
+    "encumbrance": {
+      "attribute": "strength",
+      "weight_unit": "kg",
+      "capacity_multiplier": 2
+    }
+  },
   "creation_flow": {
     "steps": [
       {
@@ -100,13 +115,17 @@
       "id": "career.guardsman",
       "type": "career",
       "primary_characteristics": ["BS", "T", "Ag"],
-      "starting_wounds_formula": "10 + 1d5"
+      "equipment_proficiencies": ["basic_ranged", "melee"],
+      "starting_wounds_formula": "10 + 1d5",
+      "starting_wealth": {"dice_count": 1, "die_sides": 10, "multiplier": 10, "base": 50}
     },
     "career.psyker": {
       "id": "career.psyker",
       "type": "career",
       "primary_characteristics": ["WP", "Int"],
-      "starting_wounds_formula": "8 + 1d5"
+      "equipment_proficiencies": ["melee"],
+      "starting_wounds_formula": "8 + 1d5",
+      "starting_wealth": {"dice_count": 1, "die_sides": 10, "multiplier": 5, "base": 50}
     },
     "skill.acrobatics": {"id": "skill.acrobatics", "type": "skill", "name": "Acrobatics", "characteristic": "characteristic.agility", "trained_only": true},
     "skill.animal_care": {"id": "skill.animal_care", "type": "skill", "name": "Animal Care", "characteristic": "characteristic.intelligence"},
@@ -166,6 +185,12 @@
     "item.lasgun": {
       "id": "item.lasgun",
       "type": "item",
+      "name": "Lasgun",
+      "description": "A basic ranged weapon with 100 m range and a 60-shot clip.",
+      "cost": 100,
+      "weight": 5,
+      "proficiency": "basic_ranged",
+      "equipment_slots": ["two_handed"],
       "category": "basic_ranged",
       "damage": "1d10+3",
       "penetration": 0,
@@ -175,6 +200,12 @@
     "item.chainsword": {
       "id": "item.chainsword",
       "type": "item",
+      "name": "Chainsword",
+      "description": "A powered melee weapon with damage 1d10+2 and penetration 2.",
+      "cost": 75,
+      "weight": 4,
+      "proficiency": "melee",
+      "equipment_slots": ["main_hand", "off_hand"],
       "category": "melee",
       "damage": "1d10+2",
       "penetration": 2
@@ -182,6 +213,11 @@
     "item.flak_jacket": {
       "id": "item.flak_jacket",
       "type": "item",
+      "name": "Flak Jacket",
+      "description": "Flak armor covering the body and arms, with 3 armor points.",
+      "cost": 20,
+      "weight": 5,
+      "equipment_slots": ["body"],
       "category": "armor",
       "armor_points": 3,
       "coverage": ["body", "arms"]

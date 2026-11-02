@@ -89,7 +89,13 @@ ScriptsOnlyBuild:
     className: GridLayoutGroup
   - hash:
       serializedVersion: 2
-      Hash: 46ce4d01fc2007796dd82cc83cdfed7e
+      Hash: fb9237740c26606a10a67ce60bc936ad
+    assemblyName: Assembly-CSharp
+    namespaceName: 
+    className: StepSummaryData
+  - hash:
+      serializedVersion: 2
+      Hash: 28232d268d1dd205e222d69b5b958f7f
     assemblyName: Assembly-CSharp
     namespaceName: 
     className: CharacterCreationClient
@@ -177,6 +183,12 @@ ScriptsOnlyBuild:
     assemblyName: UnityEngine.UI
     namespaceName: UnityEngine.UI
     className: Shadow
+  - hash:
+      serializedVersion: 2
+      Hash: 5ff91511c7c166e37440b8909ef14f84
+    assemblyName: Assembly-CSharp
+    namespaceName: 
+    className: StepSummaryHeader
   - hash:
       serializedVersion: 2
       Hash: 8d5318ed8488b1fe17c08044ce1b8309
@@ -351,6 +363,12 @@ ScriptsOnlyBuild:
     assemblyName: UnityEngine.UI
     namespaceName: UnityEngine.UI
     className: ScrollRect
+  - hash:
+      serializedVersion: 2
+      Hash: 7486c8dfea40a7d1c84bcdda65a07ce6
+    assemblyName: Assembly-CSharp
+    namespaceName: 
+    className: ResponsiveStepHeader
   platform: 20
   scenePathNames:
   - Assets/Scenes/Runtime.unity

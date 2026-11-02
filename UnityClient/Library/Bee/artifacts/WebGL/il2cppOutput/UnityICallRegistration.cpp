@@ -310,6 +310,10 @@ void RegisterAllStrippedInternalCalls()
 
 	//Start Registrations for type : UnityEngine.Component
 
+		//System.IntPtr UnityEngine.Component::get_gameObject_Injected(System.IntPtr)
+		void Register_UnityEngine_Component_get_gameObject_Injected();
+		Register_UnityEngine_Component_get_gameObject_Injected();
+
 		//System.IntPtr UnityEngine.Component::get_transform_Injected(System.IntPtr)
 		void Register_UnityEngine_Component_get_transform_Injected();
 		Register_UnityEngine_Component_get_transform_Injected();
@@ -642,6 +646,10 @@ void RegisterAllStrippedInternalCalls()
 		void Register_UnityEngine_GUI_SetNextControlName_Injected();
 		Register_UnityEngine_GUI_SetNextControlName_Injected();
 
+		//System.Void UnityEngine.GUI::get_backgroundColor_Injected(UnityEngine.Color&)
+		void Register_UnityEngine_GUI_get_backgroundColor_Injected();
+		Register_UnityEngine_GUI_get_backgroundColor_Injected();
+
 		//System.Void UnityEngine.GUI::get_color_Injected(UnityEngine.Color&)
 		void Register_UnityEngine_GUI_get_color_Injected();
 		Register_UnityEngine_GUI_get_color_Injected();
@@ -854,6 +862,14 @@ void RegisterAllStrippedInternalCalls()
 		void Register_UnityEngine_GUIStyle_set_Internal_clipOffset_Injected();
 		Register_UnityEngine_GUIStyle_set_Internal_clipOffset_Injected();
 
+		//System.Void UnityEngine.GUIStyle::set_alignment_Injected(System.IntPtr,UnityEngine.TextAnchor)
+		void Register_UnityEngine_GUIStyle_set_alignment_Injected();
+		Register_UnityEngine_GUIStyle_set_alignment_Injected();
+
+		//System.Void UnityEngine.GUIStyle::set_clipping_Injected(System.IntPtr,UnityEngine.TextClipping)
+		void Register_UnityEngine_GUIStyle_set_clipping_Injected();
+		Register_UnityEngine_GUIStyle_set_clipping_Injected();
+
 		//System.Void UnityEngine.GUIStyle::set_contentOffset_Injected(System.IntPtr,UnityEngine.Vector2&)
 		void Register_UnityEngine_GUIStyle_set_contentOffset_Injected();
 		Register_UnityEngine_GUIStyle_set_contentOffset_Injected();
@@ -865,6 +881,10 @@ void RegisterAllStrippedInternalCalls()
 		//System.Void UnityEngine.GUIStyle::set_fontStyle_Injected(System.IntPtr,UnityEngine.FontStyle)
 		void Register_UnityEngine_GUIStyle_set_fontStyle_Injected();
 		Register_UnityEngine_GUIStyle_set_fontStyle_Injected();
+
+		//System.Void UnityEngine.GUIStyle::set_font_Injected(System.IntPtr,System.IntPtr)
+		void Register_UnityEngine_GUIStyle_set_font_Injected();
+		Register_UnityEngine_GUIStyle_set_font_Injected();
 
 		//System.Void UnityEngine.GUIStyle::set_rawName_Injected(System.IntPtr,UnityEngine.Bindings.ManagedSpanWrapper&)
 		void Register_UnityEngine_GUIStyle_set_rawName_Injected();
@@ -1584,6 +1604,14 @@ void RegisterAllStrippedInternalCalls()
 
 	//End Registrations for type : UnityEngine.RenderTexture
 
+	//Start Registrations for type : UnityEngine.Resources
+
+		//System.IntPtr UnityEngine.Resources::GetBuiltinResource_Injected(System.Type,UnityEngine.Bindings.ManagedSpanWrapper&)
+		void Register_UnityEngine_Resources_GetBuiltinResource_Injected();
+		Register_UnityEngine_Resources_GetBuiltinResource_Injected();
+
+	//End Registrations for type : UnityEngine.Resources
+
 	//Start Registrations for type : UnityEngine.ResourcesAPIInternal
 
 		//System.IntPtr UnityEngine.ResourcesAPIInternal::FindShaderByName_Injected(UnityEngine.Bindings.ManagedSpanWrapper&)
@@ -2266,9 +2294,21 @@ void RegisterAllStrippedInternalCalls()
 		void Register_UnityEngine_Texture_GetDataWidth_Injected();
 		Register_UnityEngine_Texture_GetDataWidth_Injected();
 
+		//System.Void UnityEngine.Texture::set_filterMode_Injected(System.IntPtr,UnityEngine.FilterMode)
+		void Register_UnityEngine_Texture_set_filterMode_Injected();
+		Register_UnityEngine_Texture_set_filterMode_Injected();
+
+		//System.Void UnityEngine.Texture::set_wrapMode_Injected(System.IntPtr,UnityEngine.TextureWrapMode)
+		void Register_UnityEngine_Texture_set_wrapMode_Injected();
+		Register_UnityEngine_Texture_set_wrapMode_Injected();
+
 	//End Registrations for type : UnityEngine.Texture
 
 	//Start Registrations for type : UnityEngine.Texture2D
+
+		//System.Boolean UnityEngine.Texture2D::Internal_CreateEmptyImpl(UnityEngine.Texture2D)
+		void Register_UnityEngine_Texture2D_Internal_CreateEmptyImpl();
+		Register_UnityEngine_Texture2D_Internal_CreateEmptyImpl();
 
 		//System.Boolean UnityEngine.Texture2D::Internal_CreateImpl_Injected(UnityEngine.Texture2D,System.Int32,System.Int32,System.Int32,UnityEngine.Experimental.Rendering.GraphicsFormat,UnityEngine.TextureColorSpace,UnityEngine.Experimental.Rendering.TextureCreationFlags,System.IntPtr,System.Boolean,UnityEngine.Bindings.ManagedSpanWrapper&)
 		void Register_UnityEngine_Texture2D_Internal_CreateImpl_Injected();
@@ -2286,13 +2326,17 @@ void RegisterAllStrippedInternalCalls()
 		void Register_UnityEngine_Texture2D_get_isReadable_Injected();
 		Register_UnityEngine_Texture2D_get_isReadable_Injected();
 
-		//System.IntPtr UnityEngine.Texture2D::get_whiteTexture_Injected()
-		void Register_UnityEngine_Texture2D_get_whiteTexture_Injected();
-		Register_UnityEngine_Texture2D_get_whiteTexture_Injected();
-
 		//System.Void UnityEngine.Texture2D::ApplyImpl_Injected(System.IntPtr,System.Boolean,System.Boolean)
 		void Register_UnityEngine_Texture2D_ApplyImpl_Injected();
 		Register_UnityEngine_Texture2D_ApplyImpl_Injected();
+
+		//System.Void UnityEngine.Texture2D::SetAllPixels32_Injected(System.IntPtr,UnityEngine.Bindings.ManagedSpanWrapper&,System.Int32)
+		void Register_UnityEngine_Texture2D_SetAllPixels32_Injected();
+		Register_UnityEngine_Texture2D_SetAllPixels32_Injected();
+
+		//System.Void UnityEngine.Texture2D::SetPixelsImpl_Injected(System.IntPtr,System.Int32,System.Int32,System.Int32,System.Int32,UnityEngine.Bindings.ManagedSpanWrapper&,System.Int32,System.Int32)
+		void Register_UnityEngine_Texture2D_SetPixelsImpl_Injected();
+		Register_UnityEngine_Texture2D_SetPixelsImpl_Injected();
 
 	//End Registrations for type : UnityEngine.Texture2D
 

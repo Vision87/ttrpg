@@ -315,6 +315,35 @@ def test_initial_package_flows_match_available_definitions() -> None:
         available_types = {
             definition["type"] for definition in package["definitions"].values()
         }
+        shop = package["equipment_shop"]
+        assert shop["currency"]["abbreviation"]
+        assert shop["wealth_definition_type"] in {"class", "career"}
+        wealth_definitions = [
+            definition
+            for definition in package["definitions"].values()
+            if definition["type"] == shop["wealth_definition_type"]
+            and not definition.get("parent_class")
+        ]
+        assert wealth_definitions
+        assert all("starting_wealth" in definition for definition in wealth_definitions)
+        shop_items = [
+            definition
+            for definition in package["definitions"].values()
+            if definition["type"] == "item" and not definition.get("_disabled", False)
+        ]
+        assert shop_items
+        assert all(
+            definition["cost"] >= 0 and definition["equipment_slots"]
+            for definition in shop_items
+        )
+        if package_id == "dnd35-core":
+            assert shop["data_status"] == "verified"
+            assert shop["currency"]["abbreviation"] == "gp"
+            assert shop["source_references"]
+            assert package["definitions"]["item.longsword"]["cost"] == 15
+        else:
+            assert shop["data_status"] == "provisional"
+            assert "not verified" in shop["data_note"]
         for step in steps:
             for field in step["fields"]:
                 if field["type"] == "choice":

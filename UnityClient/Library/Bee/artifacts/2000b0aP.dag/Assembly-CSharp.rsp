@@ -306,11 +306,17 @@
 -analyzer:"/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/Microsoft.Extensions.Logging.Generators.dll"
 -analyzer:"/Applications/Unity/Hub/Editor/6000.6.2f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll"
 "Assets/Scripts/CharacterCreationClient.cs"
+"Assets/Scripts/CreationIcons.cs"
+"Assets/Scripts/CreationUiStyles.cs"
 "Assets/Scripts/ImmersiveProjection.cs"
+"Assets/Scripts/ResponsiveStepHeader.cs"
 "Assets/Scripts/SessionClient.cs"
 "Assets/Scripts/SessionDtos.cs"
 "Assets/Scripts/SessionProjection.cs"
+"Assets/Scripts/StepSummaryData.cs"
+"Assets/Scripts/StepSummaryHeader.cs"
 "Assets/Scripts/TacticalProjection.cs"
+"Assets/Scripts/UiLayout.cs"
 -langversion:9.0
 /deterministic
 /optimize+

@@ -3,6 +3,47 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import secrets
+from typing import Any
+
+
+def calculate_starting_wealth(
+    rule: dict[str, Any],
+    method: str,
+    rng: Any | None = None,
+) -> dict[str, Any]:
+    if method not in {"roll", "average"}:
+        raise ValueError("Starting wealth method must be roll or average")
+    dice_count = rule.get("dice_count")
+    die_sides = rule.get("die_sides")
+    multiplier = rule.get("multiplier")
+    base = rule.get("base", 0)
+    if (
+        isinstance(dice_count, bool)
+        or not isinstance(dice_count, int)
+        or dice_count < 1
+        or isinstance(die_sides, bool)
+        or not isinstance(die_sides, int)
+        or die_sides < 2
+        or isinstance(multiplier, bool)
+        or not isinstance(multiplier, (int, float))
+        or multiplier <= 0
+        or isinstance(base, bool)
+        or not isinstance(base, (int, float))
+        or base < 0
+    ):
+        raise ValueError("Starting wealth package formula is invalid")
+
+    if method == "average":
+        amount = base + dice_count * (die_sides + 1) / 2 * multiplier
+        dice: list[int] = []
+    else:
+        source = rng or secrets.SystemRandom()
+        dice = [source.randint(1, die_sides) for _ in range(dice_count)]
+        amount = base + sum(dice) * multiplier
+    if isinstance(amount, float) and amount.is_integer():
+        amount = int(amount)
+    return {"method": method, "amount": amount, "dice": dice}
 
 
 @dataclass(frozen=True)
@@ -76,4 +117,3 @@ class EquipmentState:
 
     def save_loadout(self, name: str) -> None:
         self.loadouts[name] = [item.item_id for item in self.selected]
-

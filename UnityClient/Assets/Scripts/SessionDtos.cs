@@ -232,6 +232,12 @@ public class CreationStepDto
 }
 
 [Serializable]
+public class StepSelectionRequestDto
+{
+    public string step_id;
+}
+
+[Serializable]
 public class CreationFlowDto
 {
     public string[] validation_rules;
@@ -316,6 +322,7 @@ public class DraftRecordDto
     public int current_step_index;
     public string template_id;
     public AbilityRollEventDto[] ability_roll_events;
+    public EquipmentStateDto equipment_state;
 }
 
 [Serializable]
@@ -343,6 +350,57 @@ public class ReviewDto
 }
 
 [Serializable]
+public class ShopCurrencyDto
+{
+    public string id;
+    public string name;
+    public string abbreviation;
+}
+
+[Serializable]
+public class ShopItemDto
+{
+    public string id;
+    public string name;
+    public int cost;
+    public string description;
+    public string[] equipment_slots;
+    public string image_asset;
+}
+
+[Serializable]
+public class EquipmentItemInstanceDto
+{
+    public string instance_id;
+    public string item_id;
+    public string slot;
+}
+
+[Serializable]
+public class EquipmentStateDto
+{
+    public string wealth_method;
+    public string wealth_definition_id;
+    public int starting_wealth;
+    public int remaining_wealth;
+    public int[] wealth_roll;
+    public EquipmentItemInstanceDto[] items;
+    public bool template_migration_complete;
+}
+
+[Serializable]
+public class EquipmentShopDto
+{
+    public ShopCurrencyDto currency;
+    public string wealth_definition_type;
+    public string data_status;
+    public string data_note;
+    public string[] source_references;
+    public ShopItemDto[] catalog;
+    public EquipmentStateDto state;
+}
+
+[Serializable]
 public class DraftResponseDto
 {
     public DraftRecordDto draft;
@@ -350,6 +408,7 @@ public class DraftResponseDto
     public DraftFieldValueDto[] field_values;
     public ReviewDto review;
     public ThemeDto theme;
+    public EquipmentShopDto equipment_shop;
 }
 
 [Serializable]
@@ -418,4 +477,30 @@ public class CharacterRecordDto
 {
     public string id;
     public string name;
+    public EquipmentStateDto equipment_state;
+}
+
+[Serializable]
+public class StartingWealthRequestDto
+{
+    public string method;
+}
+
+[Serializable]
+public class PurchaseEquipmentRequestDto
+{
+    public string item_id;
+}
+
+[Serializable]
+public class EquipItemRequestDto
+{
+    public string instance_id;
+    public string slot;
+}
+
+[Serializable]
+public class UnequipItemRequestDto
+{
+    public string instance_id;
 }
