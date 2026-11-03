@@ -350,11 +350,22 @@ public class ReviewDto
 }
 
 [Serializable]
+public class ShopCurrencyDenominationDto
+{
+    public string id;
+    public string name;
+    public string abbreviation;
+    public int value;
+}
+
+[Serializable]
 public class ShopCurrencyDto
 {
     public string id;
     public string name;
     public string abbreviation;
+    public string base_unit;
+    public ShopCurrencyDenominationDto[] denominations;
 }
 
 [Serializable]
@@ -366,6 +377,15 @@ public class ShopItemDto
     public string description;
     public string[] equipment_slots;
     public string image_asset;
+    public string source_reference;
+    public ShopItemDetailDto[] details;
+}
+
+[Serializable]
+public class ShopItemDetailDto
+{
+    public string label;
+    public string value;
 }
 
 [Serializable]
@@ -409,6 +429,34 @@ public class DraftResponseDto
     public ReviewDto review;
     public ThemeDto theme;
     public EquipmentShopDto equipment_shop;
+    public PortraitPackDto[] portrait_packs;
+}
+
+[Serializable]
+public class PortraitPackDto
+{
+    public string id;
+    public string version;
+    public string kind;
+    public string name;
+    public string[] compatible_rulesets;
+    public PortraitOptionDto[] portraits;
+}
+
+[Serializable]
+public class PortraitOptionDto
+{
+    public string id;
+    public int revision;
+    public string asset_reference;
+    public string name;
+    public string description;
+    public string[] tags;
+    public string resource_path;
+    public string source;
+    public string attribution;
+    public string license;
+    public string license_url;
 }
 
 [Serializable]

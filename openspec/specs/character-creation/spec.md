@@ -62,11 +62,31 @@ The system SHALL distinguish explicit user choices, template recommendations, ca
 - **THEN** the system SHALL mark the value as user-selected and SHALL allow the user to restore the template recommendation without resetting unrelated choices.
 
 ### Requirement: Appearance and presentation configuration
-The system SHALL allow a character creator to configure identity, portrait, 2D token, 3D appearance, equipment visuals, animation style, sounds, and effects independently from the character's mechanical rules.
+The system SHALL allow a character creator to configure identity, portrait, 2D token, 3D appearance, equipment visuals, animation style, sounds, and effects independently from the character's mechanical rules. Portrait selection SHALL use a full-screen, vertically scrollable image grid of portraits compatible with the active game. The number of grid columns SHALL adapt to the available screen width. Selecting an image SHALL immediately apply its stable asset reference and close the picker. Source and license details SHALL remain inspectable for the selected portrait.
 
 #### Scenario: User previews a configured character
 - **WHEN** a user changes an appearance or presentation choice
 - **THEN** the system SHALL update the character preview and SHALL leave mechanical choices unchanged unless the user explicitly edits equipment or another rules field.
+
+#### Scenario: Browsing portraits for the active game
+- **WHEN** a user opens the portrait picker during character creation
+- **THEN** the system SHALL fill the available screen with an image-only grid of portraits from the base collection and compatible bundled expansion collections, provide vertical scrolling when needed, adapt the column count to the screen width, and support pointer or touch selection.
+
+#### Scenario: Selecting a portrait
+- **WHEN** a user selects a portrait image
+- **THEN** the system SHALL immediately save its stable asset reference to the character presentation and close the picker.
+
+#### Scenario: Closing without selecting a portrait
+- **WHEN** a user closes the picker without selecting an image
+- **THEN** the system SHALL retain the previously saved portrait.
+
+#### Scenario: Inspecting the selected portrait
+- **WHEN** a user views the selected portrait's details in appearance configuration
+- **THEN** the system SHALL expose its collection, source, attribution, and license information.
+
+#### Scenario: Resuming a portrait selection
+- **WHEN** a user resumes a draft with a selected portrait
+- **THEN** the system SHALL restore the same versioned portrait reference and SHALL NOT alter mechanical choices.
 
 ### Requirement: Character finalization
 The system SHALL provide a final validation report before saving a character and SHALL retain the package versions, explicit choices, derived values, overrides, and presentation references used to create it.
@@ -139,3 +159,22 @@ The system SHALL offer individual and full-set ability score rolling only when t
 #### Scenario: Resuming a rolled draft
 - **WHEN** a user resumes a draft containing rolled ability scores
 - **THEN** the current scores, latest dice results, and individual and group roll history are restored without rolling again
+
+### Requirement: Compact ability score rolling controls
+The character-creation interface SHALL present package-declared individual score-roll controls as dice-icon-only buttons beside their associated numeric inputs. Each icon-only control SHALL have an accessible label or tooltip that identifies the score and whether the action rolls or rerolls it. Package-declared full-score-group roll or reroll controls SHALL appear directly below the save-draft-and-exit action and above the scrollable score fields. The interface SHALL retain existing package permissions and authoritative roll behavior, and SHALL omit controls that are not enabled by package metadata.
+
+#### Scenario: Rolling an individual score
+- **WHEN** a user views an individually rollable score field
+- **THEN** the input and a dice-icon-only roll or reroll button appear together on the same row, and the button's accessible label identifies its action and score
+
+#### Scenario: Rolling a complete score group
+- **WHEN** a user views a step with a package-declared full-score-group roll or reroll action
+- **THEN** the group action appears immediately below “Save draft and exit” and before the scrollable score fields
+
+#### Scenario: Package does not permit a roll
+- **WHEN** the package does not declare an individual or group roll action, or its reroll policy does not permit that action
+- **THEN** the corresponding control is omitted while all other permitted roll controls remain available
+
+#### Scenario: Completing a score roll
+- **WHEN** a user activates an individual or group roll control
+- **THEN** the authoritative service continues to generate the score values and roll history according to the active package, and the client presents the resulting values and dice details as before

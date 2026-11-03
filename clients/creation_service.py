@@ -10,6 +10,10 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from assets.registry import AssetRegistry, AssetRevision
+from assets.portrait_packs import (
+    load_portrait_packs,
+    portrait_packs_for_ruleset,
+)
 from character.model import Character
 from character.store import (
     CharacterStore,
@@ -35,6 +39,9 @@ class CharacterCreationApplication:
     def __init__(self, project_root: Path, data_directory: Path) -> None:
         self.project_root = project_root
         self.store = CharacterStore(data_directory)
+        self.portrait_packs = load_portrait_packs(
+            project_root / "content" / "portrait-packs"
+        )
         self.asset_registry = AssetRegistry()
         self.asset_registry.register(
             AssetRevision(
@@ -524,6 +531,8 @@ class CharacterCreationApplication:
                             "description": item_def.get("description", ""),
                             "equipment_slots": list(item_def.get("equipment_slots", [])),
                             "image_asset": item_def.get("image_asset", ""),
+                            "source_reference": item_def.get("source_reference", ""),
+                            "details": deepcopy(item_def.get("details", [])),
                         }
                     )
         return {
@@ -531,6 +540,7 @@ class CharacterCreationApplication:
             "current_step": workflow.current_step,
             "field_values": field_values,
             "review": workflow.review(),
+            "portrait_packs": self._portrait_packs_payload(workflow.ruleset_id),
             "equipment_shop": (
                 {
                     **deepcopy(workflow.equipment_shop),
@@ -542,6 +552,15 @@ class CharacterCreationApplication:
             ),
             "theme": flow_payload["theme"],
         }
+
+    def _portrait_packs_payload(self, ruleset_id: str) -> list[dict[str, Any]]:
+        packs = portrait_packs_for_ruleset(self.portrait_packs, ruleset_id)
+        for pack in packs:
+            for portrait in pack["portraits"]:
+                portrait["asset_reference"] = (
+                    f'{portrait["id"]}@{portrait["revision"]}'
+                )
+        return packs
 
     def _start_character(self, character_id: str) -> dict[str, Any]:
         record = self.store.load_character_record(character_id)

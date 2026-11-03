@@ -277,19 +277,87 @@ def validate_equipment_shop(
         )
 
     currency = equipment_shop.get("currency")
-    if not isinstance(currency, dict) or set(currency) != {
-        "id",
-        "name",
-        "abbreviation",
-    }:
+    if (
+        not isinstance(currency, dict)
+        or {"id", "name", "abbreviation"} - set(currency)
+        or set(currency)
+        - {
+            "id",
+            "name",
+            "abbreviation",
+            "base_unit",
+            "denominations",
+        }
+    ):
         raise DefinitionValidationError(
-            "equipment_shop.currency must declare id, name, and abbreviation"
+            "equipment_shop.currency must declare id, name, and abbreviation and "
+            "may declare base_unit and denominations"
         )
     for field_name in ("id", "name", "abbreviation"):
         value = currency.get(field_name)
         if not isinstance(value, str) or not value.strip():
             raise DefinitionValidationError(
                 f"equipment_shop.currency.{field_name} must be a non-empty string"
+            )
+    base_unit = currency.get("base_unit")
+    denominations = currency.get("denominations")
+    if base_unit is None:
+        if denominations is not None:
+            raise DefinitionValidationError(
+                "equipment_shop.currency.denominations requires base_unit"
+            )
+    else:
+        if not isinstance(base_unit, str) or not base_unit.strip():
+            raise DefinitionValidationError(
+                "equipment_shop.currency.base_unit must be a non-empty string"
+            )
+        if not isinstance(denominations, list) or not denominations:
+            raise DefinitionValidationError(
+                "equipment_shop.currency.denominations must be a non-empty list"
+            )
+        denomination_ids: set[str] = set()
+        previous_value: int | None = None
+        base_matches = False
+        for index, denomination in enumerate(denominations):
+            path = f"equipment_shop.currency.denominations[{index}]"
+            if not isinstance(denomination, dict) or set(denomination) != {
+                "id",
+                "name",
+                "abbreviation",
+                "value",
+            }:
+                raise DefinitionValidationError(
+                    f"{path} must declare id, name, abbreviation, and value"
+                )
+            for field_name in ("id", "name", "abbreviation"):
+                value = denomination.get(field_name)
+                if not isinstance(value, str) or not value.strip():
+                    raise DefinitionValidationError(
+                        f"{path}.{field_name} must be a non-empty string"
+                    )
+            denomination_id = denomination["id"]
+            if denomination_id in denomination_ids:
+                raise DefinitionValidationError(
+                    "equipment_shop.currency.denominations ids must be unique"
+                )
+            denomination_ids.add(denomination_id)
+            value = denomination.get("value")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+                or (previous_value is not None and value >= previous_value)
+            ):
+                raise DefinitionValidationError(
+                    f"{path}.value must be a positive integer in descending order"
+                )
+            previous_value = value
+            if denomination_id == base_unit and value == 1:
+                base_matches = True
+        if not base_matches:
+            raise DefinitionValidationError(
+                "equipment_shop.currency.base_unit must identify the denomination "
+                "whose value is 1"
             )
 
     wealth_definition_type = equipment_shop.get("wealth_definition_type")
@@ -445,12 +513,11 @@ def validate_equipment_shop(
         slots = definition.get("equipment_slots")
         if (
             not isinstance(slots, list)
-            or not slots
             or not all(isinstance(slot, str) and slot in EQUIPMENT_SLOTS for slot in slots)
             or len(set(slots)) != len(slots)
         ):
             raise DefinitionValidationError(
-                f"{path}.equipment_slots must contain unique supported slots"
+                f"{path}.equipment_slots must be a list of unique supported slots"
             )
         image_asset = definition.get("image_asset")
         if image_asset is not None and (
@@ -459,6 +526,31 @@ def validate_equipment_shop(
         ):
             raise DefinitionValidationError(
                 f"{path}.image_asset must use the local asset reference format id@revision"
+            )
+        source_reference = definition.get("source_reference")
+        if source_reference is not None and (
+            not isinstance(source_reference, str)
+            or not source_reference.startswith("https://")
+        ):
+            raise DefinitionValidationError(
+                f"{path}.source_reference must be an HTTPS URL"
+            )
+        if data_status == "verified" and source_reference is None:
+            raise DefinitionValidationError(
+                f"{path}.source_reference is required for verified equipment data"
+            )
+        details = definition.get("details", [])
+        if not isinstance(details, list) or any(
+            not isinstance(detail, dict)
+            or set(detail) != {"label", "value"}
+            or not isinstance(detail["label"], str)
+            or not detail["label"].strip()
+            or not isinstance(detail["value"], str)
+            or not detail["value"].strip()
+            for detail in details
+        ):
+            raise DefinitionValidationError(
+                f"{path}.details must contain label/value string pairs"
             )
 
 

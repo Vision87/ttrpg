@@ -49,6 +49,9 @@ class CreationWorkflow:
             "items": [],
             "template_migration_complete": False,
         }
+        currency = self.equipment_shop.get("currency", {}) if self.equipment_shop else {}
+        if currency.get("base_unit"):
+            self.equipment_state["currency_base_unit"] = currency["base_unit"]
 
         if creation_flow is not None:
             steps = creation_flow.get("steps")
@@ -666,6 +669,49 @@ class CreationWorkflow:
         )
         self.equipment_state["remaining_wealth"] = starting - spent
 
+    def _migrate_equipment_currency_state(self) -> None:
+        if self.equipment_shop is None:
+            return
+        currency = self.equipment_shop.get("currency", {})
+        target_unit = currency.get("base_unit")
+        if not target_unit:
+            return
+        current_unit = self.equipment_state.get("currency_base_unit")
+        if current_unit == target_unit:
+            return
+        if current_unit is not None:
+            raise ValueError(
+                f"Unsupported equipment currency migration: {current_unit} to {target_unit}"
+            )
+
+        legacy_value = next(
+            (
+                denomination["value"]
+                for denomination in currency.get("denominations", [])
+                if denomination.get("id") == currency.get("id")
+            ),
+            None,
+        )
+        if not isinstance(legacy_value, int) or legacy_value <= 1:
+            raise ValueError(
+                "Equipment currency migration requires the legacy denomination"
+            )
+        for field_name in ("starting_wealth", "remaining_wealth"):
+            amount = self.equipment_state.get(field_name)
+            if amount is None:
+                continue
+            if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                raise ValueError(
+                    f"Cannot migrate invalid equipment currency field: {field_name}"
+                )
+            converted = amount * legacy_value
+            if isinstance(converted, float) and not converted.is_integer():
+                raise ValueError(
+                    f"Equipment currency conversion loses precision: {field_name}"
+                )
+            self.equipment_state[field_name] = int(converted)
+        self.equipment_state["currency_base_unit"] = target_unit
+
     def purchase_item(self, item_id: str) -> dict[str, Any]:
         if self.equipment_shop is None:
             raise ValueError("This ruleset does not provide an equipment shop")
@@ -1144,6 +1190,7 @@ class CreationWorkflow:
         workflow.equipment_state = deepcopy(
             record.get("equipment_state", workflow.equipment_state)
         )
+        workflow._migrate_equipment_currency_state()
         workflow.ability_rolls = deepcopy(record.get("ability_rolls", {}))
         workflow.ability_roll_events = deepcopy(
             record.get("ability_roll_events", [])

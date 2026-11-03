@@ -234,6 +234,7 @@ def test_equipment_shop_client_contract_dtos() -> None:
     assert "public class EquipItemRequestDto" in session_dtos
     assert "public class UnequipItemRequestDto" in session_dtos
     assert "public EquipmentShopDto equipment_shop;" in session_dtos
+    assert "public ShopCurrencyDenominationDto[] denominations;" in session_dtos
     assert "public EquipmentStateDto equipment_state;" in session_dtos
 
 
@@ -242,6 +243,43 @@ def test_equipment_shop_ui_rendering_and_interaction_contracts() -> None:
     assert "DrawEquipmentShop" in creator
     assert "draft.equipment_shop" in creator
     assert "shop.data_status == \"provisional\"" in creator
+    assert "FormatCurrency(state.starting_wealth, shop.currency)" in creator
+    assert "FormatCurrency(item.cost, shop.currency)" in creator
+    assert "foreach (var s in itemDef.equipment_slots)" in creator
+    assert "private const int ShopCatalogPageSize = 50;" in creator
+    assert "MatchesShopSearch(item, shopSearchText)" in creator
+    assert "Showing \" + matchingCount + \" matching items" in creator
+    assert "if (shop.catalog != null)" in creator
+    assert "searchRequired" not in creator
+    assert creator.index("GUILayout.Label(\"Character Loadout\"") < creator.index(
+        "GUILayout.Label(\"Details: \" + selectedItem.name"
+    )
+
+
+def test_equipment_item_icons_use_local_resources_and_visible_fallback() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    load_start = creator.index("private Texture2D LoadItemTexture")
+    load_end = creator.index("\n    private ", load_start + 1)
+    load_item_texture = creator[load_start:load_end]
+    assert "Resources.Load<Texture2D>(ResourcePath(imageAsset))" in load_item_texture
+    assert "return GetFallbackItemTexture();" in load_item_texture
+    assert "selectedItem.source_reference" in creator
+    assert "selectedItem.details" in creator
+    assert "ShopItemDetailDto" in (
+        ROOT / "Assets/Scripts/SessionDtos.cs"
+    ).read_text()
+    assert "public string source_reference;" in (
+        ROOT / "Assets/Scripts/SessionDtos.cs"
+    ).read_text()
+    for item_id in (
+        "item.longsword",
+        "item.padded-armor",
+        "item.backpack",
+        "item.potion-of-cure-light-wounds",
+        "item.ring-of-protection-1",
+    ):
+        assert (ROOT / f"Assets/Resources/{item_id}.png").is_file()
+        assert (ROOT / f"Assets/Resources/{item_id}.png.meta").is_file()
     assert "Roll Starting Wealth" in creator
     assert "Average Starting Wealth" in creator
     assert "GetFallbackItemTexture" in creator
@@ -256,6 +294,81 @@ def test_equipment_shop_ui_rendering_and_interaction_contracts() -> None:
     assert "/equipment/purchase" in creator
     assert "/equipment/equip" in creator
     assert "/equipment/unequip" in creator
+
+
+def test_portrait_picker_client_and_dto_contracts() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    session_dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    field = creator[
+        creator.index("private void DrawField"):
+        creator.index("private void DrawSkillRanks")
+    ]
+    apply = creator[
+        creator.index("private IEnumerator ApplySelectedPortrait"):
+        creator.index("private void DrawSkillRanks")
+    ]
+    close = creator[
+        creator.index("private void ClosePortraitPicker"):
+        creator.index("private IEnumerator ApplySelectedPortrait")
+    ]
+    field_ui = creator[
+        creator.index("private void DrawPortraitField"):
+        creator.index("private string CurrentPortraitReference")
+    ]
+    tile = creator[
+        creator.index("private void DrawPortraitTile"):
+        creator.index("private static string WrapPortraitPath")
+    ]
+    save_fields = creator[
+        creator.index("private IEnumerator SaveCurrentStepFields"):
+        creator.index("private IEnumerator SaveStepAndExit")
+    ]
+
+    assert 'field.slot == "portrait"' in field
+    assert "DrawPortraitField(field);" in field
+    assert "Choose portrait" in creator
+    assert "DrawPortraitPickerOverlay" in creator
+    assert "DrawPortraitGallery" in creator
+    assert "portraitSearchText" in creator
+    assert "float innerContentWidth = Mathf.Max(0f, contentWidth - 32f);" in creator
+    assert "Screen.height - margin - footerHeight" in creator
+    assert "float galleryHeight = Mathf.Max(80f, contentHeight - 110f);" in creator
+    assert "DrawPortraitGallery(entries, galleryHeight, innerContentWidth);" in creator
+    assert "portraitGalleryScrollPosition = GUILayout.BeginScrollView(" in creator
+    assert "portraitPickerContentScrollPosition" not in creator
+    assert "DrawPortraitPreview" not in creator
+    assert '"Apply portrait"' not in creator
+    assert "private static int PortraitGalleryColumns(float width)" in creator
+    assert "const float minimumTileWidth = 144f;" in creator
+    assert "Mathf.FloorToInt(availableWidth / minimumTileWidth)" in creator
+    assert "Mathf.Max(1f, (width - 48f) / columns)" in creator
+    assert "private void DrawPortraitTile(PortraitGalleryEntry entry, float tileSize)" in creator
+    assert "new GUIContent(\n                LoadPortraitTexture(entry.Portrait),\n                entry.Portrait.name)" in creator
+    assert "DrawPortraitCard" not in creator
+    assert "Base collection" not in tile
+    assert "StartCoroutine(ApplySelectedPortrait());" in tile
+    assert "Source: " in field_ui
+    assert "Attribution: " in field_ui
+    assert "License: " in field_ui
+    assert "portraitDetailsExpanded" in field_ui
+    assert 'Replace("/", "/\\n").Replace("-", "-\\n")' in creator
+    assert "Resources.Load<Texture2D>(" in creator
+    assert "ResourcePath(portrait.resource_path)" in creator
+    assert "ReportMissingPortraitReference" in creator
+    assert "portraitSelectionReference" in apply
+    assert "UpdateField(JsonUtility.ToJson(request))" in apply
+    assert "ClosePortraitPicker();" in apply
+    assert "portraitPickerOpen = false;" in close
+    assert "UpdateField" not in close
+    assert "using a fallback portrait" in creator
+    assert "Debug.LogWarning" in creator
+    assert 'field.slot == "portrait"' in save_fields
+    assert "continue;" in save_fields
+    assert "public PortraitPackDto[] portrait_packs;" in session_dtos
+    assert "public class PortraitPackDto" in session_dtos
+    assert "public class PortraitOptionDto" in session_dtos
+    assert "public string asset_reference;" in session_dtos
+    assert "public string license_url;" in session_dtos
 
 
 def test_creation_layout_uses_shared_density_and_fixed_chrome() -> None:

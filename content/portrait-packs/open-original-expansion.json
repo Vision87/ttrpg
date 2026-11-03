@@ -1,0 +1,57 @@
+{
+  "id": "portrait-pack.open-original-expansion",
+  "version": "1.0.0",
+  "kind": "expansion",
+  "name": "Open Adventurers",
+  "compatible_rulesets": ["dnd35-core", "dark-heresy-core"],
+  "portraits": [
+    {
+      "id": "portrait.expansion.veteran",
+      "revision": 1,
+      "name": "Veteran",
+      "description": "A road-tested survivor with a steady gaze.",
+      "tags": ["veteran", "warrior", "survivor"],
+      "resource_path": "portrait/expansion-veteran",
+      "source": "UnityClient/ArtSource/portrait.expansion-veteran.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.expansion.scholar",
+      "revision": 1,
+      "name": "Scholar",
+      "description": "A curious reader with a circlet of worked metal.",
+      "tags": ["scholar", "researcher", "sage"],
+      "resource_path": "portrait/expansion-scholar",
+      "source": "UnityClient/ArtSource/portrait.expansion-scholar.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.expansion.wanderer",
+      "revision": 1,
+      "name": "Wanderer",
+      "description": "A cloak-wearing traveler shaped by long journeys.",
+      "tags": ["wanderer", "traveler", "explorer"],
+      "resource_path": "portrait/expansion-wanderer",
+      "source": "UnityClient/ArtSource/portrait.expansion-wanderer.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.expansion.mystic",
+      "revision": 1,
+      "name": "Mystic",
+      "description": "A thoughtful seer beneath a violet travel hood.",
+      "tags": ["mystic", "seer", "wanderer"],
+      "resource_path": "portrait/expansion-mystic",
+      "source": "UnityClient/ArtSource/portrait.expansion-mystic.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ]
+}

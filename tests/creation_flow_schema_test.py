@@ -333,14 +333,32 @@ def test_initial_package_flows_match_available_definitions() -> None:
         ]
         assert shop_items
         assert all(
-            definition["cost"] >= 0 and definition["equipment_slots"]
+            definition["cost"] >= 0
+            and isinstance(definition["equipment_slots"], list)
             for definition in shop_items
         )
         if package_id == "dnd35-core":
             assert shop["data_status"] == "verified"
             assert shop["currency"]["abbreviation"] == "gp"
+            assert shop["currency"]["base_unit"] == "copper_piece"
             assert shop["source_references"]
-            assert package["definitions"]["item.longsword"]["cost"] == 15
+            assert package["definitions"]["item.longsword"]["cost"] == 1500
+            assert package["definitions"]["item.longsword"]["source_reference"]
+            assert package["definitions"]["item.longsword"]["image_asset"] == "item.longsword@1"
+            expected_catalog_items = {
+                "item.backpack": 200,
+                "item.padded-armor": 500,
+                "item.potion-of-cure-light-wounds": 5000,
+                "item.ring-of-protection-1": 200000,
+            }
+            for item_id, expected_cost in expected_catalog_items.items():
+                item = package["definitions"][item_id]
+                assert item["cost"] == expected_cost
+                assert item["source_reference"].startswith(
+                    "https://www.d20srd.org/srd/"
+                )
+                assert item["description"]
+                assert item["details"]
         else:
             assert shop["data_status"] == "provisional"
             assert "not verified" in shop["data_note"]
@@ -371,6 +389,43 @@ def test_dnd_package_has_original_summary_for_every_feat() -> None:
         assert "Missing feat descriptions" in str(error)
     else:
         raise AssertionError("expected missing feat description error")
+
+
+def test_dnd_equipment_catalog_matches_expected_srd_inventory() -> None:
+    package = json.loads(Path("content/dnd35-core/package.json").read_text())
+    inventory = json.loads(
+        Path("content/dnd35-core/srd-equipment-inventory.json").read_text()
+    )
+    expected = {entry["id"]: entry for entry in inventory["entries"]}
+    catalog = {
+        definition_id: definition
+        for definition_id, definition in package["definitions"].items()
+        if definition["type"] == "item"
+    }
+
+    assert set(catalog) == set(expected)
+    for item_id, expected_item in expected.items():
+        item = catalog[item_id]
+        assert item["name"] == expected_item["name"]
+        assert item["cost"] == expected_item["cost"]
+        assert type(item["cost"]) is int
+        assert item["source_reference"] == expected_item["source_reference"]
+        assert item["description"].strip()
+        assert isinstance(item["equipment_slots"], list)
+        assert isinstance(item["details"], list) and item["details"]
+
+    longsword = catalog["item.longsword"]
+    assert any(
+        detail["label"] == "Critical" and detail["value"] == "19-20 / x2"
+        for detail in longsword["details"]
+    )
+    scroll = catalog["item.scroll-divine-level-4-death-ward"]
+    assert scroll["cost"] == 70000
+    assert any(
+        detail["label"] == "Spell" and detail["value"] == "death ward"
+        for detail in scroll["details"]
+    )
+    assert catalog["item.potion-of-cure-light-wounds"]["cost"] == 5000
 
 
 def test_theme_profile_uses_default_and_falls_back_for_missing_assets() -> None:

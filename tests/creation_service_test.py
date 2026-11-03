@@ -12,6 +12,82 @@ def _application(data_directory: str) -> CharacterCreationApplication:
     )
 
 
+def test_draft_exposes_only_compatible_portrait_packs_without_rules_dependencies() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        expected = {
+            "dnd35-core": {
+                "portrait-pack.dnd35-original",
+                "portrait-pack.open-original-expansion",
+            },
+            "dark-heresy-core": {
+                "portrait-pack.dark-heresy-original",
+                "portrait-pack.open-original-expansion",
+            },
+        }
+
+        for ruleset_id, expected_pack_ids in expected.items():
+            _, package_versions, _ = app._resolve_ruleset(ruleset_id)
+            status, response = app.handle(
+                "POST",
+                "/api/drafts",
+                {"ruleset_id": ruleset_id, "name": "Portrait Test"},
+            )
+
+            assert status == 201
+            assert {pack["id"] for pack in response["portrait_packs"]} == (
+                expected_pack_ids
+            )
+            assert response["draft"]["package_versions"] == package_versions
+            portraits = [
+                portrait
+                for pack in response["portrait_packs"]
+                for portrait in pack["portraits"]
+            ]
+            assert all(
+                portrait["asset_reference"]
+                == f'{portrait["id"]}@{portrait["revision"]}'
+                for portrait in portraits
+            )
+
+
+def test_selected_portrait_revision_survives_draft_reload() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Portrait Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        original_choices = created["draft"]["choices"]
+        original_abilities = created["draft"]["abilities"]
+        portrait_reference = "portrait.expansion.veteran@1"
+
+        status, applied = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "portrait", "value": portrait_reference},
+        )
+        assert status == 200
+        assert applied["draft"]["choices"] == original_choices
+        assert applied["draft"]["abilities"] == original_abilities
+
+        resumed_app = _application(directory)
+        status, resumed = resumed_app.handle("GET", f"/api/drafts/{draft_id}")
+
+        assert status == 200
+        portrait_value = next(
+            value
+            for value in resumed["field_values"]
+            if value["field_id"] == "portrait"
+        )
+        assert portrait_value["text_value"] == portrait_reference
+        assert resumed["draft"]["choices"] == original_choices
+        assert resumed["draft"]["abilities"] == original_abilities
+
+
 def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
     with TemporaryDirectory() as directory:
         app = _application(directory)
@@ -885,7 +961,7 @@ def test_creation_service_selects_and_persists_starting_wealth() -> None:
         assert status == 400
         assert "Choose a class before selecting starting wealth" in error["error"]["message"]
 
-        # Select Fighter class (6d4 * 10, average = 6 * 2.5 * 10 = 150)
+        # Select Fighter class (6d4 * 10 gp, average = 150 gp = 15000 cp)
         status, _ = app.handle(
             "PUT",
             f"/api/drafts/{draft_id}",
@@ -912,8 +988,8 @@ def test_creation_service_selects_and_persists_starting_wealth() -> None:
         shop = response["equipment_shop"]
         assert shop["state"]["wealth_method"] == "average"
         assert shop["state"]["wealth_definition_id"] == "class.fighter"
-        assert shop["state"]["starting_wealth"] == 150
-        assert shop["state"]["remaining_wealth"] == 150
+        assert shop["state"]["starting_wealth"] == 15000
+        assert shop["state"]["remaining_wealth"] == 15000
         assert shop["state"]["wealth_roll"] is None
 
         # Idempotent re-selection of the same method
@@ -923,7 +999,7 @@ def test_creation_service_selects_and_persists_starting_wealth() -> None:
             {"method": "average"},
         )
         assert status == 200
-        assert reselected["equipment_shop"]["state"]["starting_wealth"] == 150
+        assert reselected["equipment_shop"]["state"]["starting_wealth"] == 15000
 
         # Conflicting method rejected
         status, error = app.handle(
@@ -938,8 +1014,8 @@ def test_creation_service_selects_and_persists_starting_wealth() -> None:
         status, resumed = app.handle("GET", f"/api/drafts/{draft_id}")
         assert status == 200
         assert resumed["equipment_shop"]["state"]["wealth_method"] == "average"
-        assert resumed["equipment_shop"]["state"]["starting_wealth"] == 150
-        assert resumed["draft"]["equipment_state"]["starting_wealth"] == 150
+        assert resumed["equipment_shop"]["state"]["starting_wealth"] == 15000
+        assert resumed["draft"]["equipment_state"]["starting_wealth"] == 15000
 
         # Dark Heresy roll method
         status, dh_created = app.handle(
@@ -973,6 +1049,54 @@ def test_creation_service_selects_and_persists_starting_wealth() -> None:
             assert dh_shop["state"]["wealth_roll"] == [7]
 
 
+def test_legacy_dnd_wealth_state_migrates_from_gp_to_cp_once() -> None:
+    with TemporaryDirectory() as directory:
+            app = _application(directory)
+            status, created = app.handle(
+                "POST",
+                "/api/drafts",
+                {"ruleset_id": "dnd35-core", "name": "Legacy Wealth"},
+            )
+            assert status == 201
+            draft_id = created["draft"]["id"]
+            for field_id, value in (("class", "class.fighter"), ("strength", 16)):
+                status, _ = app.handle(
+                    "PUT",
+                    f"/api/drafts/{draft_id}",
+                    {"field_id": field_id, "value": value},
+                )
+                assert status == 200
+            status, _ = app.handle(
+                "POST",
+                f"/api/drafts/{draft_id}/equipment/wealth",
+                {"method": "average"},
+            )
+            assert status == 200
+            status, _ = app.handle(
+                "POST",
+                f"/api/drafts/{draft_id}/equipment/purchase",
+                {"item_id": "item.longsword"},
+            )
+            assert status == 200
+
+            record = app.store.load_draft_record(draft_id)
+            record["equipment_state"]["starting_wealth"] = 150
+            record["equipment_state"]["remaining_wealth"] = 135
+            record["equipment_state"].pop("currency_base_unit")
+            app.store._write_named_record("drafts", draft_id, record)
+
+            status, migrated = app.handle("GET", f"/api/drafts/{draft_id}")
+            assert status == 200
+            state = migrated["equipment_shop"]["state"]
+            assert state["starting_wealth"] == 15000
+            assert state["remaining_wealth"] == 13500
+            assert state["currency_base_unit"] == "copper_piece"
+
+            status, resumed = app.handle("GET", f"/api/drafts/{draft_id}")
+            assert status == 200
+            assert resumed["equipment_shop"]["state"] == state
+
+
 def test_creation_service_equipment_migration_and_persistence() -> None:
     with TemporaryDirectory() as directory:
         app = _application(directory)
@@ -995,7 +1119,7 @@ def test_creation_service_equipment_migration_and_persistence() -> None:
         assert shop_state["items"][0]["item_id"] == "item.longsword"
         assert shop_state["items"][0]["slot"] is None
 
-        # Select starting wealth with method "average" (class.fighter is already chosen by template: 150)
+        # Select starting wealth with method "average" (150 gp = 15000 cp)
         status, response = app.handle(
             "POST",
             f"/api/drafts/{draft_id}/equipment/wealth",
@@ -1003,16 +1127,16 @@ def test_creation_service_equipment_migration_and_persistence() -> None:
         )
         assert status == 200
         state = response["equipment_shop"]["state"]
-        assert state["starting_wealth"] == 150
-        # Longsword costs 15, so remaining is 150 - 15 = 135
-        assert state["remaining_wealth"] == 135
+        assert state["starting_wealth"] == 15000
+        # Longsword costs 15 gp = 1500 cp.
+        assert state["remaining_wealth"] == 13500
 
         # Resume draft and verify idempotency of template migration
         status, resumed = app.handle("GET", f"/api/drafts/{draft_id}")
         assert status == 200
         resumed_state = resumed["equipment_shop"]["state"]
-        assert resumed_state["starting_wealth"] == 150
-        assert resumed_state["remaining_wealth"] == 135
+        assert resumed_state["starting_wealth"] == 15000
+        assert resumed_state["remaining_wealth"] == 13500
         assert len(resumed_state["items"]) == 1
 
         # Allocate skills to make draft finalizable
@@ -1037,8 +1161,8 @@ def test_creation_service_equipment_migration_and_persistence() -> None:
         assert status == 200
         char_record = finalized["character"]
         assert "equipment_state" in char_record
-        assert char_record["equipment_state"]["starting_wealth"] == 150
-        assert char_record["equipment_state"]["remaining_wealth"] == 135
+        assert char_record["equipment_state"]["starting_wealth"] == 15000
+        assert char_record["equipment_state"]["remaining_wealth"] == 13500
         assert len(char_record["equipment_state"]["items"]) == 1
 
         # Load from store
@@ -1046,8 +1170,8 @@ def test_creation_service_equipment_migration_and_persistence() -> None:
             char_record["id"],
             available_package_versions={"dnd35-core": "1.0.0"},
         )
-        assert loaded_char.equipment_state["starting_wealth"] == 150
-        assert loaded_char.equipment_state["remaining_wealth"] == 135
+        assert loaded_char.equipment_state["starting_wealth"] == 15000
+        assert loaded_char.equipment_state["remaining_wealth"] == 13500
 
 
 def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> None:
@@ -1070,7 +1194,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         assert status == 400
         assert "Select starting wealth" in error["error"]["message"]
 
-        # Select class and wealth (150)
+        # Select class and wealth (150 gp = 15000 cp)
         status, _ = app.handle(
             "PUT",
             f"/api/drafts/{draft_id}",
@@ -1090,7 +1214,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
 
-        # Purchase longsword (cost 15)
+        # Purchase longsword (cost 15 gp = 1500 cp)
         status, bought1 = app.handle(
             "POST",
             f"/api/drafts/{draft_id}/equipment/purchase",
@@ -1098,7 +1222,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
         state = bought1["equipment_shop"]["state"]
-        assert state["remaining_wealth"] == 135
+        assert state["remaining_wealth"] == 13500
         assert len(state["items"]) == 1
         item1_id = state["items"][0]["instance_id"]
         assert state["items"][0]["slot"] is None
@@ -1111,7 +1235,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
         state = bought2["equipment_shop"]["state"]
-        assert state["remaining_wealth"] == 120
+        assert state["remaining_wealth"] == 12000
         assert len(state["items"]) == 2
         item2_id = state["items"][1]["instance_id"]
 
@@ -1123,7 +1247,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
         state = equipped1["equipment_shop"]["state"]
-        assert state["remaining_wealth"] == 120  # No extra charge!
+        assert state["remaining_wealth"] == 12000  # No extra charge!
         item1 = next(it for it in state["items"] if it["instance_id"] == item1_id)
         assert item1["slot"] == "main_hand"
 
@@ -1153,7 +1277,7 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
         state = equipped2["equipment_shop"]["state"]
-        assert state["remaining_wealth"] == 120
+        assert state["remaining_wealth"] == 12000
 
         # Unequip item 1
         status, unequipped = app.handle(
@@ -1163,18 +1287,27 @@ def test_creation_service_equipment_purchase_equip_and_unequip_operations() -> N
         )
         assert status == 200
         state = unequipped["equipment_shop"]["state"]
-        assert state["remaining_wealth"] == 120
+        assert state["remaining_wealth"] == 12000
         item1 = next(it for it in state["items"] if it["instance_id"] == item1_id)
         assert item1["slot"] is None
 
         # Verify catalog is exposed
         assert len(unequipped["equipment_shop"]["catalog"]) >= 1
+        assert len(unequipped["equipment_shop"]["catalog"]) == 1625
         sword_entry = next(
             cat for cat in unequipped["equipment_shop"]["catalog"]
             if cat["id"] == "item.longsword"
         )
-        assert sword_entry["cost"] == 15
+        assert sword_entry["cost"] == 1500
         assert "main_hand" in sword_entry["equipment_slots"]
+        assert sword_entry["image_asset"] == "item.longsword@1"
+        assert sword_entry["source_reference"] == (
+            "https://www.d20srd.org/srd/equipment/weapons.htm"
+        )
+        assert sword_entry["details"][0] == {
+            "label": "Weapon category",
+            "value": "Martial, one-handed melee",
+        }
 
         # Insufficient funds rejection in Dark Heresy
         status, broke_draft = app.handle(
@@ -1307,7 +1440,7 @@ def test_equipment_wealth_recalculates_for_changed_class_and_preserves_inventory
                 {"method": "roll"},
             )
         assert status == 200
-        assert response["equipment_shop"]["state"]["starting_wealth"] == 240
+        assert response["equipment_shop"]["state"]["starting_wealth"] == 24000
         for _ in range(5):
             status, response = app.handle(
                 "POST",
@@ -1336,8 +1469,8 @@ def test_equipment_wealth_recalculates_for_changed_class_and_preserves_inventory
         assert state["wealth_definition_id"] == "class.wizard"
         assert state["wealth_method"] == "roll"
         assert state["wealth_roll"] == [2, 2, 2]
-        assert state["starting_wealth"] == 60
-        assert state["remaining_wealth"] == -15
+        assert state["starting_wealth"] == 6000
+        assert state["remaining_wealth"] == -1500
         assert len(state["items"]) == 5
 
         with patch("secrets.SystemRandom.randint", return_value=1):

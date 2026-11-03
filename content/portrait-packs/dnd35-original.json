@@ -1,0 +1,57 @@
+{
+  "id": "portrait-pack.dnd35-original",
+  "version": "1.0.0",
+  "kind": "base",
+  "name": "Original Fantasy Portraits",
+  "compatible_rulesets": ["dnd35-core"],
+  "portraits": [
+    {
+      "id": "portrait.dnd35.dwarf-warden",
+      "revision": 1,
+      "name": "Dwarf Warden",
+      "description": "A steadfast guardian with a rune-work circlet.",
+      "tags": ["dwarf", "guardian", "beard"],
+      "resource_path": "portrait/dnd35-dwarf-warden",
+      "source": "UnityClient/ArtSource/portrait.dnd35-dwarf-warden.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dnd35.elf-scholar",
+      "revision": 1,
+      "name": "Elf Scholar",
+      "description": "An attentive scholar framed by a silver circlet.",
+      "tags": ["elf", "scholar", "magic"],
+      "resource_path": "portrait/dnd35-elf-scholar",
+      "source": "UnityClient/ArtSource/portrait.dnd35-elf-scholar.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dnd35.human-vanguard",
+      "revision": 1,
+      "name": "Human Vanguard",
+      "description": "A battle-tested traveler with a weathered expression.",
+      "tags": ["human", "warrior", "veteran"],
+      "resource_path": "portrait/dnd35-human-vanguard",
+      "source": "UnityClient/ArtSource/portrait.dnd35-human-vanguard.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dnd35.halfling-scout",
+      "revision": 1,
+      "name": "Halfling Scout",
+      "description": "A nimble scout wearing a deep-green hood.",
+      "tags": ["halfling", "scout", "ranger"],
+      "resource_path": "portrait/dnd35-halfling-scout",
+      "source": "UnityClient/ArtSource/portrait.dnd35-halfling-scout.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ]
+}

@@ -135,6 +135,7 @@ def test_equipment_shop_package_validates_currency_wealth_and_items() -> None:
                 "proficiency": "martial",
                 "equipment_slots": ["main_hand", "off_hand"],
                 "image_asset": "item.sword@1",
+                "source_reference": "https://rules.example.test/sword",
             },
         },
     }
@@ -155,6 +156,38 @@ def test_equipment_shop_package_validates_currency_wealth_and_items() -> None:
         assert "local asset reference" in str(error)
     else:
         raise AssertionError("expected remote item artwork reference rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"]["source_reference"] = (
+        "file:///sword"
+    )
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "source_reference must be an HTTPS URL" in str(error)
+    else:
+        raise AssertionError("expected invalid item source reference rejection")
+
+    invalid_package = {
+        **package,
+        "definitions": {
+            key: dict(value) for key, value in package["definitions"].items()
+        },
+    }
+    invalid_package["definitions"]["item.sword"]["details"] = [
+        {"label": "Damage", "value": ""}
+    ]
+    try:
+        validate_ruleset_package(invalid_package)
+    except DefinitionValidationError as error:
+        assert "details must contain label/value string pairs" in str(error)
+    else:
+        raise AssertionError("expected invalid item detail rejection")
 
     invalid_package = {
         **package,
@@ -220,6 +253,31 @@ def test_equipment_shop_package_validates_currency_wealth_and_items() -> None:
         assert "declared equipment proficiency group" in str(error)
     else:
         raise AssertionError("expected undeclared proficiency rejection")
+
+    denominated_package = deepcopy(package)
+    denominated_package["equipment_shop"]["currency"].update(
+        {
+            "base_unit": "cp",
+            "denominations": [
+                {"id": "gp", "name": "Gold Piece", "abbreviation": "gp", "value": 100},
+                {"id": "sp", "name": "Silver Piece", "abbreviation": "sp", "value": 10},
+                {"id": "cp", "name": "Copper Piece", "abbreviation": "cp", "value": 1},
+            ],
+        }
+    )
+    validate_ruleset_package(denominated_package)
+
+    denominated_package["equipment_shop"]["currency"]["denominations"][1]["value"] = 100
+    try:
+        validate_ruleset_package(denominated_package)
+    except DefinitionValidationError as error:
+        assert "descending order" in str(error)
+    else:
+        raise AssertionError("expected invalid denomination ordering rejection")
+
+    carried_only_package = deepcopy(package)
+    carried_only_package["definitions"]["item.sword"]["equipment_slots"] = []
+    validate_ruleset_package(carried_only_package)
 
 
 def test_equipment_shop_requires_provenance_for_verified_and_provisional_data() -> None:

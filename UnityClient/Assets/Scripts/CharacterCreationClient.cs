@@ -64,9 +64,21 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private Vector2 featListScrollPosition;
     private string selectedShopItemId = "";
     private string hoveredShopItemId = "";
+    private string shopSearchText = "";
+    private int shopCatalogPage;
     private Vector2 shopListScrollPosition;
     private Vector2 backpackScrollPosition;
     private Texture2D fallbackItemTexture;
+    private const int ShopCatalogPageSize = 50;
+    private bool portraitPickerOpen;
+    private string portraitFieldId = "";
+    private string portraitSelectionReference = "";
+    private string portraitSearchText = "";
+    private Vector2 portraitGalleryScrollPosition;
+    private bool portraitDetailsExpanded;
+    private Texture2D fallbackPortraitTexture;
+    private readonly HashSet<string> reportedMissingPortraitReferences =
+        new HashSet<string>();
     [SerializeField]
     private StepSummaryData stepSummaryData;
     private StepSummaryHeader stepSummaryHeader;
@@ -82,6 +94,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         public string Description;
         public FeatRequirementState State;
+    }
+
+    private sealed class PortraitGalleryEntry
+    {
+        public PortraitPackDto Pack;
+        public PortraitOptionDto Portrait;
     }
 
     public void Configure(
@@ -152,6 +170,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 themeControlHover,
                 themeControlActive);
             CreationUiStyles.Ensure();
+        }
+        if (portraitPickerOpen)
+        {
+            DrawPortraitPickerOverlay();
+            RestoreThemeColors();
+            return;
         }
         if (screen != ClientScreen.Board)
         {
@@ -431,6 +455,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
             selectedValues.Clear();
             skillRankValues.Clear();
             scrollPosition = Vector2.zero;
+            portraitPickerOpen = false;
         }
         foreach (var fieldValue in response.field_values ?? new DraftFieldValueDto[0])
         {
@@ -741,7 +766,9 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 {
                     var state = draft.equipment_shop.state;
                     int itemCount = state.items != null ? state.items.Length : 0;
-                    string wealth = state.remaining_wealth != null ? state.remaining_wealth.ToString() + " gp" : "";
+                    string wealth = state.remaining_wealth != null
+                        ? FormatCurrency(state.remaining_wealth, draft.equipment_shop.currency)
+                        : "";
                     if (itemCount > 0 && !string.IsNullOrEmpty(wealth))
                     {
                         return itemCount + " items · " + wealth;
@@ -842,6 +869,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         GUILayout.Space(6);
         GUILayout.Label(field.label + (field.required ? " *" : ""), CreationUiStyles.FieldLabel);
+        if (field.type == "presentation" && field.slot == "portrait")
+        {
+            DrawPortraitField(field);
+            return;
+        }
         if (field.type == "number" ||
             (field.type == "presentation" && field.slot == "scale"))
         {
@@ -1256,6 +1288,35 @@ public sealed class CharacterCreationClient : MonoBehaviour
         };
     }
 
+    private static string FormatCurrency(int amount, ShopCurrencyDto currency)
+    {
+        if (currency == null || currency.denominations == null || currency.denominations.Length == 0)
+        {
+            return amount + " " + (currency != null ? currency.abbreviation : "gp");
+        }
+
+        long remaining = Math.Abs((long)amount);
+        var parts = new List<string>();
+        foreach (var denomination in currency.denominations)
+        {
+            if (denomination == null || denomination.value <= 0)
+            {
+                continue;
+            }
+            long count = remaining / denomination.value;
+            if (count > 0)
+            {
+                parts.Add(count + " " + denomination.abbreviation);
+                remaining %= denomination.value;
+            }
+        }
+        if (parts.Count == 0)
+        {
+            parts.Add("0 " + currency.abbreviation);
+        }
+        return (amount < 0 ? "-" : "") + string.Join(" ", parts);
+    }
+
     private static bool IsAbilityId(string rule)
     {
         switch (rule)
@@ -1291,7 +1352,6 @@ public sealed class CharacterCreationClient : MonoBehaviour
         }
 
         var state = shop.state;
-        string currencyAbbr = shop.currency != null ? shop.currency.abbreviation : "gp";
         bool hasChosenWealth = state != null && !string.IsNullOrEmpty(state.wealth_method);
         bool sideBySide = UiLayout.CurrentDensity.SideBySide;
 
@@ -1333,10 +1393,10 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 "Wealth Method: " + state.wealth_method.ToUpperInvariant(),
                 CreationUiStyles.Caption);
             GUILayout.Label(
-                "Starting Budget: " + state.starting_wealth + " " + currencyAbbr,
+                "Starting Budget: " + FormatCurrency(state.starting_wealth, shop.currency),
                 CreationUiStyles.Body);
             GUILayout.Label(
-                "Remaining: " + state.remaining_wealth + " " + currencyAbbr,
+                "Remaining: " + FormatCurrency(state.remaining_wealth, shop.currency),
                 CreationUiStyles.Status);
             if (state.wealth_roll != null && state.wealth_roll.Length > 0)
             {
@@ -1371,6 +1431,51 @@ public sealed class CharacterCreationClient : MonoBehaviour
         GUILayout.Label(
             "Equipment Shop (" + (shop.catalog != null ? shop.catalog.Length : 0) + " items)",
             CreationUiStyles.Title);
+        GUILayout.Label("Search item name or details", CreationUiStyles.Caption);
+        string updatedSearchText = GUILayout.TextField(shopSearchText);
+        if (updatedSearchText != shopSearchText)
+        {
+            shopSearchText = updatedSearchText;
+            shopCatalogPage = 0;
+        }
+
+        int catalogCount = shop.catalog != null ? shop.catalog.Length : 0;
+        int matchingCount = 0;
+        if (shop.catalog != null)
+        {
+            foreach (var item in shop.catalog)
+            {
+                if (MatchesShopSearch(item, shopSearchText))
+                {
+                    matchingCount++;
+                }
+            }
+        }
+        int pageCount = Mathf.Max(
+            1,
+            Mathf.CeilToInt(matchingCount / (float)ShopCatalogPageSize));
+        shopCatalogPage = Mathf.Clamp(shopCatalogPage, 0, pageCount - 1);
+        GUILayout.Label(
+            "Showing " + matchingCount + " matching items",
+            CreationUiStyles.Caption);
+        if (pageCount > 1)
+        {
+            bool paginationWasEnabled = GUI.enabled;
+            GUILayout.BeginHorizontal();
+            GUI.enabled = paginationWasEnabled && shopCatalogPage > 0;
+            if (CreationUiStyles.SecondaryButton("Previous"))
+            {
+                shopCatalogPage--;
+            }
+            GUI.enabled = paginationWasEnabled && shopCatalogPage < pageCount - 1;
+            if (CreationUiStyles.SecondaryButton(
+                "Next (" + (shopCatalogPage + 1) + "/" + pageCount + ")"))
+            {
+                shopCatalogPage++;
+            }
+            GUI.enabled = paginationWasEnabled;
+            GUILayout.EndHorizontal();
+        }
         float catalogHeight = UiLayout.BodyListHeight(
             sideBySide ? 0.58f : 0.4f,
             sideBySide ? 200f : 140f,
@@ -1380,10 +1485,27 @@ public sealed class CharacterCreationClient : MonoBehaviour
             GUILayout.Height(catalogHeight));
 
         ShopItemDto selectedItem = null;
+        int matchingIndex = 0;
+        int visibleCount = 0;
         if (shop.catalog != null)
         {
             foreach (var item in shop.catalog)
             {
+                if (!MatchesShopSearch(item, shopSearchText))
+                {
+                    continue;
+                }
+                if (matchingIndex < shopCatalogPage * ShopCatalogPageSize)
+                {
+                    matchingIndex++;
+                    continue;
+                }
+                if (visibleCount >= ShopCatalogPageSize)
+                {
+                    break;
+                }
+                matchingIndex++;
+                visibleCount++;
                 if (item.id == selectedShopItemId || (string.IsNullOrEmpty(selectedShopItemId) && item.id == hoveredShopItemId))
                 {
                     selectedItem = item;
@@ -1395,7 +1517,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 GUILayout.Label(texture, GUILayout.Width(40), GUILayout.Height(40));
                 GUILayout.BeginVertical();
                 GUILayout.Label(
-                    item.name + " (" + item.cost + " " + currencyAbbr + ")",
+                    item.name + " (" + FormatCurrency(item.cost, shop.currency) + ")",
                     CreationUiStyles.FieldLabel);
                 if (!string.IsNullOrEmpty(item.description))
                 {
@@ -1405,7 +1527,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 bool canAfford = hasChosenWealth && state.remaining_wealth >= item.cost;
                 bool previousEnabled = GUI.enabled;
                 GUI.enabled = previousEnabled && canAfford && !requestInProgress;
-                string buyLabel = "Buy (" + item.cost + " " + currencyAbbr + ")";
+                string buyLabel = "Buy (" + FormatCurrency(item.cost, shop.currency) + ")";
                 if (sideBySide)
                 {
                     GUILayout.FlexibleSpace();
@@ -1443,40 +1565,10 @@ public sealed class CharacterCreationClient : MonoBehaviour
             }
         }
         GUILayout.EndScrollView();
-
-        if (selectedItem != null)
+        if (matchingCount == 0)
         {
-            GUILayout.Space(6);
-            GUILayout.BeginVertical(GUI.skin.box);
-            GUILayout.Label("Details: " + selectedItem.name, CreationUiStyles.Title);
-            GUILayout.Label(
-                "Cost: " + selectedItem.cost + " " + currencyAbbr,
-                CreationUiStyles.Body);
-            if (selectedItem.equipment_slots != null && selectedItem.equipment_slots.Length > 0)
-            {
-                GUILayout.Label("Compatible Slots: " + string.Join(", ", selectedItem.equipment_slots));
-            }
-            if (!string.IsNullOrEmpty(selectedItem.description))
-            {
-                GUILayout.Label(selectedItem.description, WrappedDetailStyle());
-            }
-            GUILayout.EndVertical();
+            GUILayout.Label("No equipment matches this search.", CreationUiStyles.Caption);
         }
-
-        GUILayout.EndVertical();
-
-        if (sideBySide)
-        {
-            GUILayout.Space(12);
-        }
-
-        // Right column: Loadout & Backpack
-        GUILayout.BeginVertical(
-            GUI.skin.box,
-            GUILayout.MinWidth(280f),
-            sideBySide ? GUILayout.Width(shopLayoutWidth * 0.38f) : GUILayout.ExpandWidth(true));
-
-        GUILayout.Label("Character Loadout", CreationUiStyles.Title);
 
         var ownedItems = state != null && state.items != null ? state.items : new EquipmentItemInstanceDto[0];
         var slotNames = new List<string> { "main_hand", "off_hand", "body" };
@@ -1487,6 +1579,9 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 slotNames.Add(it.slot);
             }
         }
+
+        GUILayout.Space(8);
+        GUILayout.Label("Character Loadout", CreationUiStyles.Title);
 
         foreach (var slotName in slotNames)
         {
@@ -1614,8 +1709,89 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
         if (sideBySide)
         {
+            GUILayout.Space(12);
+        }
+
+        GUILayout.BeginVertical(
+            GUI.skin.box,
+            GUILayout.MinWidth(280f),
+            sideBySide ? GUILayout.Width(shopLayoutWidth * 0.38f) : GUILayout.ExpandWidth(true));
+
+        if (selectedItem != null)
+        {
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.Label("Details: " + selectedItem.name, CreationUiStyles.Title);
+            GUILayout.Label(
+                "Cost: " + FormatCurrency(selectedItem.cost, shop.currency),
+                CreationUiStyles.Body);
+            if (selectedItem.equipment_slots != null && selectedItem.equipment_slots.Length > 0)
+            {
+                GUILayout.Label("Compatible Slots: " + string.Join(", ", selectedItem.equipment_slots));
+            }
+            if (!string.IsNullOrEmpty(selectedItem.description))
+            {
+                GUILayout.Label(selectedItem.description, WrappedDetailStyle());
+            }
+            if (selectedItem.details != null)
+            {
+                foreach (var detail in selectedItem.details)
+                {
+                    if (detail != null &&
+                        !string.IsNullOrEmpty(detail.label) &&
+                        !string.IsNullOrEmpty(detail.value))
+                    {
+                        GUILayout.Label(
+                            detail.label + ": " + detail.value,
+                            CreationUiStyles.Body);
+                    }
+                }
+            }
+            if (!string.IsNullOrEmpty(selectedItem.source_reference))
+            {
+                GUILayout.Label("Source: " + selectedItem.source_reference, WrappedDetailStyle());
+            }
+            GUILayout.EndVertical();
+        }
+
+        GUILayout.EndVertical();
+
+        if (sideBySide)
+        {
             GUILayout.EndHorizontal();
         }
+    }
+
+    private static bool MatchesShopSearch(ShopItemDto item, string searchText)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(searchText))
+        {
+            return item != null;
+        }
+        if (ContainsShopSearchText(item.name, searchText) ||
+            ContainsShopSearchText(item.description, searchText))
+        {
+            return true;
+        }
+        if (item.details == null)
+        {
+            return false;
+        }
+        foreach (var detail in item.details)
+        {
+            if (detail != null &&
+                (ContainsShopSearchText(detail.label, searchText) ||
+                 ContainsShopSearchText(detail.value, searchText)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool ContainsShopSearchText(string value, string searchText)
+    {
+        return !string.IsNullOrEmpty(value) &&
+            value.IndexOf(searchText.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private Texture2D GetFallbackItemTexture()
@@ -1673,6 +1849,394 @@ public sealed class CharacterCreationClient : MonoBehaviour
             }
         }
         return null;
+    }
+
+    private void DrawPortraitField(CreationFieldDto field)
+    {
+        string reference = CurrentPortraitReference(field.id);
+        var entry = FindPortraitEntry(reference);
+        if (!string.IsNullOrEmpty(reference) && entry == null)
+        {
+            ReportMissingPortraitReference(reference, "no bundled catalog entry");
+        }
+
+        GUILayout.BeginHorizontal(GUI.skin.box);
+        GUILayout.Label(
+            entry != null
+                ? LoadPortraitTexture(entry.Portrait)
+                : GetFallbackPortraitTexture(),
+            GUILayout.Width(76f),
+            GUILayout.Height(96f));
+        GUILayout.BeginVertical();
+        GUILayout.Label(
+            entry != null
+                ? entry.Portrait.name
+                : string.IsNullOrEmpty(reference)
+                    ? "No portrait selected"
+                    : "Selected portrait unavailable",
+            CreationUiStyles.Body);
+        if (entry != null)
+        {
+            GUILayout.Label(entry.Pack.name, CreationUiStyles.Caption);
+            if (CreationUiStyles.TertiaryButton(
+                portraitDetailsExpanded ? "Hide portrait details" : "Portrait details"))
+            {
+                portraitDetailsExpanded = !portraitDetailsExpanded;
+            }
+            if (portraitDetailsExpanded)
+            {
+                GUILayout.Label(
+                    entry.Pack.name + " " + entry.Pack.version,
+                    CreationUiStyles.Caption);
+                GUILayout.Label(
+                    "Source: " + WrapPortraitPath(entry.Portrait.source),
+                    CreationUiStyles.Caption);
+                GUILayout.Label(
+                    "Attribution: " + entry.Portrait.attribution,
+                    CreationUiStyles.Caption);
+                GUILayout.Label(
+                    "License: " + entry.Portrait.license + " | " +
+                    WrapPortraitPath(entry.Portrait.license_url),
+                    CreationUiStyles.Caption);
+            }
+        }
+        else if (!string.IsNullOrEmpty(reference))
+        {
+            GUILayout.Label(reference, CreationUiStyles.Caption);
+        }
+        if (CreationUiStyles.SecondaryButton("Choose portrait"))
+        {
+            portraitFieldId = field.id;
+            portraitSelectionReference = reference;
+            portraitSearchText = "";
+            portraitGalleryScrollPosition = Vector2.zero;
+            errorMessage = "";
+            portraitPickerOpen = true;
+        }
+        GUILayout.EndVertical();
+        GUILayout.EndHorizontal();
+    }
+
+    private string CurrentPortraitReference(string fieldId)
+    {
+        if (textValues.TryGetValue(fieldId, out var localValue))
+        {
+            return localValue;
+        }
+        if (serverFieldValues.TryGetValue(fieldId, out var serverValue))
+        {
+            return serverValue.text_value ?? "";
+        }
+        return "";
+    }
+
+    private void DrawPortraitPickerOverlay()
+    {
+        var screenRect = new Rect(0f, 0f, Screen.width, Screen.height);
+        Color previousColor = GUI.color;
+        GUI.color = new Color(0.035f, 0.03f, 0.04f, 0.97f);
+        GUI.DrawTexture(screenRect, Texture2D.whiteTexture);
+        GUI.color = previousColor;
+        GUI.Box(screenRect, GUIContent.none, CreationUiStyles.Frame);
+
+        float margin = Screen.width < UiLayout.SmMax ? 8f : 16f;
+        float contentWidth = Mathf.Max(0f, Screen.width - 2f * margin);
+        float innerContentWidth = Mathf.Max(0f, contentWidth - 32f);
+        const float footerHeight = 56f;
+        float contentHeight = Mathf.Max(
+            0f,
+            Screen.height - 2f * margin - footerHeight);
+        float galleryHeight = Mathf.Max(80f, contentHeight - 110f);
+        GUILayout.BeginArea(
+            new Rect(margin, margin, contentWidth, contentHeight));
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(
+            "Choose a portrait",
+            CreationUiStyles.Title,
+            GUILayout.Width(150f));
+        GUILayout.Label(
+            "Search",
+            CreationUiStyles.FieldLabel,
+            GUILayout.Width(54f));
+        portraitSearchText = GUILayout.TextField(
+            portraitSearchText,
+            CreationUiStyles.Input,
+            GUILayout.ExpandWidth(true));
+        GUILayout.EndHorizontal();
+
+        List<PortraitGalleryEntry> entries = GetFilteredPortraitEntries();
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            GUILayout.Label(errorMessage, ErrorStyle());
+        }
+        DrawPortraitGallery(entries, galleryHeight, innerContentWidth);
+        GUILayout.EndVertical();
+        GUILayout.EndArea();
+
+        GUILayout.BeginArea(new Rect(
+            margin,
+            Screen.height - margin - footerHeight,
+            contentWidth,
+            footerHeight));
+        GUILayout.BeginHorizontal();
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        GUILayout.FlexibleSpace();
+        if (CreationUiStyles.TertiaryButton(
+            "Close",
+            GUILayout.Width(120f)))
+        {
+            ClosePortraitPicker();
+        }
+        GUI.enabled = previousEnabled;
+        GUILayout.EndHorizontal();
+        GUILayout.EndArea();
+    }
+
+    private List<PortraitGalleryEntry> GetFilteredPortraitEntries()
+    {
+        var entries = new List<PortraitGalleryEntry>();
+        string query = portraitSearchText.Trim();
+        foreach (var pack in draft?.portrait_packs ?? new PortraitPackDto[0])
+        {
+            foreach (var portrait in pack.portraits ?? new PortraitOptionDto[0])
+            {
+                if (!MatchesPortraitSearch(pack, portrait, query))
+                {
+                    continue;
+                }
+                entries.Add(new PortraitGalleryEntry
+                {
+                    Pack = pack,
+                    Portrait = portrait
+                });
+            }
+        }
+        return entries;
+    }
+
+    private static bool MatchesPortraitSearch(
+        PortraitPackDto pack,
+        PortraitOptionDto portrait,
+        string query)
+    {
+        if (string.IsNullOrEmpty(query) ||
+            ContainsShopSearchText(portrait.name, query) ||
+            ContainsShopSearchText(portrait.description, query) ||
+            ContainsShopSearchText(pack.name, query) ||
+            ContainsShopSearchText(pack.kind, query))
+        {
+            return true;
+        }
+        foreach (string tag in portrait.tags ?? new string[0])
+        {
+            if (ContainsShopSearchText(tag, query))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void DrawPortraitGallery(
+        List<PortraitGalleryEntry> entries,
+        float height,
+        float width)
+    {
+        int columns = PortraitGalleryColumns(width);
+        float tileSize = Mathf.Min(
+            180f,
+            Mathf.Max(1f, (width - 48f) / columns));
+        GUILayout.BeginVertical(
+            GUI.skin.box,
+            GUILayout.Width(width),
+            GUILayout.Height(height));
+        GUILayout.Label("Portrait gallery", CreationUiStyles.Section);
+        float scrollHeight = Mathf.Max(60f, height - 42f);
+        portraitGalleryScrollPosition = GUILayout.BeginScrollView(
+            portraitGalleryScrollPosition,
+            false,
+            true,
+            GUILayout.Height(scrollHeight));
+        if (entries.Count == 0)
+        {
+            GUILayout.Label(
+                "No portraits match this search.",
+                CreationUiStyles.Body);
+        }
+        else
+        {
+            for (int index = 0; index < entries.Count; index += columns)
+            {
+                GUILayout.BeginHorizontal();
+                for (int column = 0; column < columns; column++)
+                {
+                    int entryIndex = index + column;
+                    if (entryIndex >= entries.Count)
+                    {
+                        GUILayout.FlexibleSpace();
+                        continue;
+                    }
+                    DrawPortraitTile(entries[entryIndex], tileSize);
+                }
+                GUILayout.EndHorizontal();
+            }
+        }
+        GUILayout.EndScrollView();
+        GUILayout.EndVertical();
+    }
+
+    private static int PortraitGalleryColumns(float width)
+    {
+        const float minimumTileWidth = 144f;
+        float availableWidth = Mathf.Max(minimumTileWidth, width - 48f);
+        return Mathf.Clamp(
+            Mathf.FloorToInt(availableWidth / minimumTileWidth),
+            1,
+            10);
+    }
+
+    private void DrawPortraitTile(PortraitGalleryEntry entry, float tileSize)
+    {
+        bool isSelected =
+            entry.Portrait.asset_reference == portraitSelectionReference ||
+            entry.Portrait.asset_reference == CurrentPortraitReference(portraitFieldId);
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        if (GUILayout.Button(
+            new GUIContent(
+                LoadPortraitTexture(entry.Portrait),
+                entry.Portrait.name),
+            isSelected ? CreationUiStyles.Primary : CreationUiStyles.Selection,
+            GUILayout.Width(tileSize),
+            GUILayout.Height(tileSize)))
+        {
+            portraitSelectionReference = entry.Portrait.asset_reference;
+            StartCoroutine(ApplySelectedPortrait());
+        }
+        GUI.enabled = previousEnabled;
+    }
+
+    private static string WrapPortraitPath(string value)
+    {
+        return (value ?? "").Replace("/", "/\n").Replace("-", "-\n");
+    }
+
+    private PortraitGalleryEntry FindPortraitEntry(string assetReference)
+    {
+        if (string.IsNullOrEmpty(assetReference))
+        {
+            return null;
+        }
+        foreach (var pack in draft?.portrait_packs ?? new PortraitPackDto[0])
+        {
+            foreach (var portrait in pack.portraits ?? new PortraitOptionDto[0])
+            {
+                if (portrait.asset_reference == assetReference)
+                {
+                    return new PortraitGalleryEntry
+                    {
+                        Pack = pack,
+                        Portrait = portrait
+                    };
+                }
+            }
+        }
+        return null;
+    }
+
+    private Texture2D LoadPortraitTexture(PortraitOptionDto portrait)
+    {
+        if (portrait != null && !string.IsNullOrEmpty(portrait.resource_path))
+        {
+            Texture2D texture = Resources.Load<Texture2D>(
+                ResourcePath(portrait.resource_path));
+            if (texture != null)
+            {
+                return texture;
+            }
+            ReportMissingPortraitReference(
+                portrait.asset_reference,
+                "bundled image resource '" + portrait.resource_path + "' is unavailable");
+        }
+        return GetFallbackPortraitTexture();
+    }
+
+    private void ReportMissingPortraitReference(string reference, string reason)
+    {
+        string key = string.IsNullOrEmpty(reference) ? "(empty)" : reference;
+        if (reportedMissingPortraitReferences.Add(key))
+        {
+            Debug.LogWarning(
+                "Portrait unavailable for '" + key + "': " + reason +
+                "; using a fallback portrait.");
+        }
+    }
+
+    private Texture2D GetFallbackPortraitTexture()
+    {
+        if (fallbackPortraitTexture == null)
+        {
+            const int width = 96;
+            const int height = 120;
+            fallbackPortraitTexture = new Texture2D(width, height);
+            var pixels = new Color[width * height];
+            Color background = new Color(0.17f, 0.17f, 0.22f, 1f);
+            Color border = new Color(0.65f, 0.54f, 0.34f, 1f);
+            Color face = new Color(0.72f, 0.62f, 0.54f, 1f);
+            Color silhouette = new Color(0.29f, 0.29f, 0.34f, 1f);
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int dx = x - width / 2;
+                    int dy = y - 70;
+                    bool head = dx * dx * 22 + dy * dy * 16 < 28 * 28 * 16;
+                    bool shoulders = y < 44 && Mathf.Abs(dx) < 18 + (44 - y);
+                    bool hair = head && y > 77;
+                    bool isBorder = x < 3 || x >= width - 3 || y < 3 || y >= height - 3;
+                    Color color = isBorder
+                        ? border
+                        : shoulders || hair
+                            ? silhouette
+                            : head
+                                ? face
+                                : background;
+                    pixels[y * width + x] = color;
+                }
+            }
+            fallbackPortraitTexture.SetPixels(pixels);
+            fallbackPortraitTexture.Apply();
+        }
+        return fallbackPortraitTexture;
+    }
+
+    private void ClosePortraitPicker()
+    {
+        portraitPickerOpen = false;
+        portraitSelectionReference = "";
+        portraitSearchText = "";
+    }
+
+    private IEnumerator ApplySelectedPortrait()
+    {
+        if (FindPortraitEntry(portraitSelectionReference) == null)
+        {
+            errorMessage = "Select an available portrait before applying.";
+            yield break;
+        }
+        errorMessage = "";
+        var request = new StringFieldRequestDto
+        {
+            field_id = portraitFieldId,
+            value = portraitSelectionReference
+        };
+        yield return UpdateField(JsonUtility.ToJson(request));
+        if (string.IsNullOrEmpty(errorMessage))
+        {
+            ClosePortraitPicker();
+        }
     }
 
     private void DrawSkillRanks(CreationFieldDto field)
@@ -2089,6 +2653,10 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     };
                     yield return UpdateField(JsonUtility.ToJson(request));
                 }
+            }
+            else if (field.type == "presentation" && field.slot == "portrait")
+            {
+                continue;
             }
             else if (field.type == "number" ||
                 (field.type == "presentation" && field.slot == "scale"))

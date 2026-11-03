@@ -1,0 +1,57 @@
+{
+  "id": "portrait-pack.dark-heresy-original",
+  "version": "1.0.0",
+  "kind": "base",
+  "name": "Original Grimdark Portraits",
+  "compatible_rulesets": ["dark-heresy-core"],
+  "portraits": [
+    {
+      "id": "portrait.dark-heresy.frontier-soldier",
+      "revision": 1,
+      "name": "Frontier Soldier",
+      "description": "A disciplined veteran in a practical field coat.",
+      "tags": ["soldier", "veteran", "frontier"],
+      "resource_path": "portrait/dark-heresy-frontier-soldier",
+      "source": "UnityClient/ArtSource/portrait.dark-heresy-frontier-soldier.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dark-heresy.archive-adept",
+      "revision": 1,
+      "name": "Archive Adept",
+      "description": "A quiet researcher carrying the weight of old records.",
+      "tags": ["scholar", "researcher", "archive"],
+      "resource_path": "portrait/dark-heresy-archive-adept",
+      "source": "UnityClient/ArtSource/portrait.dark-heresy-archive-adept.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dark-heresy.voidfarer",
+      "revision": 1,
+      "name": "Voidfarer",
+      "description": "A seasoned pilot behind a battered flight visor.",
+      "tags": ["pilot", "voidfarer", "spacer"],
+      "resource_path": "portrait/dark-heresy-voidfarer",
+      "source": "UnityClient/ArtSource/portrait.dark-heresy-voidfarer.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "id": "portrait.dark-heresy.sanctioned-seer",
+      "revision": 1,
+      "name": "Sanctioned Seer",
+      "description": "A silver-haired mystic beneath a marked circlet.",
+      "tags": ["mystic", "seer", "psyker"],
+      "resource_path": "portrait/dark-heresy-sanctioned-seer",
+      "source": "UnityClient/ArtSource/portrait.dark-heresy-sanctioned-seer.svg",
+      "attribution": "Original artwork for Universal RPG Board; CC0 1.0",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ]
+}
