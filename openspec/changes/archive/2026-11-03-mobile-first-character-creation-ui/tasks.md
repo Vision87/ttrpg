@@ -29,4 +29,4 @@
 ## 5. Body layout reclaim and verification
 
 - [x] 5.1 Size feats/shop (and similar) list panes from leftover body height instead of fixed desktop-only constants, and verify lists remain usable at `xs` and reclaim space at `lg`
-- [ ] 5.2 Manual WebGL pass at ~375, ~768, ~1024, and ~1440: confirm compact progress, above-body Continue, readable primary controls, icons/fallbacks, and unchanged package step semantics; note any follow-ups for a later desktop rethink
+- [x] 5.2 Manual WebGL pass at ~375, ~768, ~1024, and ~1440: confirm compact progress, above-body Continue, readable primary controls, icons/fallbacks, and unchanged package step semantics; note any follow-ups for a later desktop rethink (wide progress remains horizontally scrollable and is deferred)

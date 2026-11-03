@@ -20,4 +20,4 @@
 
 - [x] 4.1 Run focused asset, service, character-creation, and Unity client contract tests; verify base and expansion portraits are discoverable and their provenance is inspectable.
 - [x] 4.2 Build the WebGL client and visually verify initial portrait selection and saved-draft restoration across supported viewport sizes.
-- [ ] 4.3 Build the WebGL client and visually verify the full-screen, vertically scrollable image grid, adaptive columns, immediate apply behavior, and selected portrait provenance at narrow and wide viewports.
+- [x] 4.3 Build the WebGL client and visually verify the full-screen, vertically scrollable image grid, adaptive columns, immediate apply behavior, and selected portrait provenance at narrow and wide viewports.

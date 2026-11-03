@@ -2,6 +2,11 @@ schema: spec-driven
 githubCopilot:
   cloudAgent: true
 
+context: |
+  Product: Python domain/service with a Unity WebGL client. The Python service is authoritative for character-creation requests and saved drafts; Unity presents the workflow. See README.md for architecture, setup, and test commands.
+  Preserve ruleset-package and asset provenance, version, and license metadata when changing bundled content.
+  The root MIT license applies only to original application code. See THIRD_PARTY_NOTICES.md for separate or unresolved terms.
+
 # Project context (optional)
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.

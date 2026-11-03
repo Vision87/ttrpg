@@ -61,6 +61,8 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private Vector2 scrollPosition;
     private Vector2 bodyScrollPosition;
     private string bodyScrollStepId = "";
+    private float editingAreaHeight;
+    private float editingChromeBottom;
     private Vector2 featListScrollPosition;
     private string selectedShopItemId = "";
     private string hoveredShopItemId = "";
@@ -568,10 +570,19 @@ public sealed class CharacterCreationClient : MonoBehaviour
         GUILayout.EndVertical();
         CreationUiStyles.DrawDivider();
 
-        float bodyHeight = UiLayout.BodyListHeight(
-            0.9f,
+        if (Event.current.type == EventType.Repaint)
+        {
+            Rect chromeRect = GUILayoutUtility.GetLastRect();
+            if (chromeRect.height > 0f)
+            {
+                editingChromeBottom = chromeRect.yMax;
+            }
+        }
+        float bodyHeight = Mathf.Max(
             120f,
-            Screen.height);
+            editingChromeBottom > 0f
+                ? editingAreaHeight - editingChromeBottom - 12f
+                : editingAreaHeight * 0.35f);
         bodyScrollPosition = GUILayout.BeginScrollView(
             bodyScrollPosition,
             false,
@@ -1860,7 +1871,8 @@ public sealed class CharacterCreationClient : MonoBehaviour
             ReportMissingPortraitReference(reference, "no bundled catalog entry");
         }
 
-        GUILayout.BeginHorizontal(GUI.skin.box);
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.BeginHorizontal();
         GUILayout.Label(
             entry != null
                 ? LoadPortraitTexture(entry.Portrait)
@@ -1883,22 +1895,6 @@ public sealed class CharacterCreationClient : MonoBehaviour
             {
                 portraitDetailsExpanded = !portraitDetailsExpanded;
             }
-            if (portraitDetailsExpanded)
-            {
-                GUILayout.Label(
-                    entry.Pack.name + " " + entry.Pack.version,
-                    CreationUiStyles.Caption);
-                GUILayout.Label(
-                    "Source: " + WrapPortraitPath(entry.Portrait.source),
-                    CreationUiStyles.Caption);
-                GUILayout.Label(
-                    "Attribution: " + entry.Portrait.attribution,
-                    CreationUiStyles.Caption);
-                GUILayout.Label(
-                    "License: " + entry.Portrait.license + " | " +
-                    WrapPortraitPath(entry.Portrait.license_url),
-                    CreationUiStyles.Caption);
-            }
         }
         else if (!string.IsNullOrEmpty(reference))
         {
@@ -1915,6 +1911,23 @@ public sealed class CharacterCreationClient : MonoBehaviour
         }
         GUILayout.EndVertical();
         GUILayout.EndHorizontal();
+        if (entry != null && portraitDetailsExpanded)
+        {
+            GUILayout.Label(
+                entry.Pack.name + " " + entry.Pack.version,
+                CreationUiStyles.Caption);
+            GUILayout.Label(
+                "Source: " + WrapPortraitPath(entry.Portrait.source),
+                CreationUiStyles.Caption);
+            GUILayout.Label(
+                "Attribution: " + entry.Portrait.attribution,
+                CreationUiStyles.Caption);
+            GUILayout.Label(
+                "License: " + entry.Portrait.license + " | " +
+                WrapPortraitPath(entry.Portrait.license_url),
+                CreationUiStyles.Caption);
+        }
+        GUILayout.EndVertical();
     }
 
     private string CurrentPortraitReference(string fieldId)
@@ -1946,24 +1959,48 @@ public sealed class CharacterCreationClient : MonoBehaviour
         float contentHeight = Mathf.Max(
             0f,
             Screen.height - 2f * margin - footerHeight);
-        float galleryHeight = Mathf.Max(80f, contentHeight - 110f);
+        bool stackedHeader = Screen.width < UiLayout.MdMax;
+        float galleryHeaderAllowance = stackedHeader ? 150f : 110f;
+        float galleryHeight = Mathf.Max(
+            80f,
+            contentHeight - galleryHeaderAllowance);
         GUILayout.BeginArea(
             new Rect(margin, margin, contentWidth, contentHeight));
         GUILayout.BeginVertical(GUI.skin.box);
-        GUILayout.BeginHorizontal();
-        GUILayout.Label(
-            "Choose a portrait",
-            CreationUiStyles.Title,
-            GUILayout.Width(150f));
-        GUILayout.Label(
-            "Search",
-            CreationUiStyles.FieldLabel,
-            GUILayout.Width(54f));
-        portraitSearchText = GUILayout.TextField(
-            portraitSearchText,
-            CreationUiStyles.Input,
-            GUILayout.ExpandWidth(true));
-        GUILayout.EndHorizontal();
+        if (stackedHeader)
+        {
+            GUILayout.Label(
+                "Choose a portrait",
+                CreationUiStyles.Title,
+                GUILayout.ExpandWidth(true));
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(
+                "Search",
+                CreationUiStyles.FieldLabel,
+                GUILayout.Width(64f));
+            portraitSearchText = GUILayout.TextField(
+                portraitSearchText,
+                CreationUiStyles.Input,
+                GUILayout.ExpandWidth(true));
+            GUILayout.EndHorizontal();
+        }
+        else
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(
+                "Choose a portrait",
+                CreationUiStyles.Title,
+                GUILayout.Width(500f));
+            GUILayout.Label(
+                "Search",
+                CreationUiStyles.FieldLabel,
+                GUILayout.Width(80f));
+            portraitSearchText = GUILayout.TextField(
+                portraitSearchText,
+                CreationUiStyles.Input,
+                GUILayout.ExpandWidth(true));
+            GUILayout.EndHorizontal();
+        }
 
         List<PortraitGalleryEntry> entries = GetFilteredPortraitEntries();
         if (!string.IsNullOrEmpty(errorMessage))
@@ -2235,6 +2272,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
         yield return UpdateField(JsonUtility.ToJson(request));
         if (string.IsNullOrEmpty(errorMessage))
         {
+            textValues[portraitFieldId] = portraitSelectionReference;
             ClosePortraitPicker();
         }
     }
@@ -3263,6 +3301,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
             contentRect.y + inset,
             Mathf.Max(0f, contentRect.width - 2f * inset),
             Mathf.Max(0f, contentRect.height - 2f * inset));
+        editingAreaHeight = innerRect.height;
         GUILayout.BeginArea(innerRect);
     }
 

@@ -315,6 +315,10 @@ def test_portrait_picker_client_and_dto_contracts() -> None:
         creator.index("private void DrawPortraitField"):
         creator.index("private string CurrentPortraitReference")
     ]
+    picker = creator[
+        creator.index("private void DrawPortraitPickerOverlay"):
+        creator.index("private List<PortraitGalleryEntry> GetFilteredPortraitEntries")
+    ]
     tile = creator[
         creator.index("private void DrawPortraitTile"):
         creator.index("private static string WrapPortraitPath")
@@ -332,7 +336,14 @@ def test_portrait_picker_client_and_dto_contracts() -> None:
     assert "portraitSearchText" in creator
     assert "float innerContentWidth = Mathf.Max(0f, contentWidth - 32f);" in creator
     assert "Screen.height - margin - footerHeight" in creator
-    assert "float galleryHeight = Mathf.Max(80f, contentHeight - 110f);" in creator
+    assert "bool stackedHeader = Screen.width < UiLayout.MdMax;" in picker
+    assert "if (stackedHeader)" in picker
+    assert "GUILayout.Width(64f)" in picker
+    assert "GUILayout.Width(500f)" in picker
+    assert "GUILayout.Width(80f)" in picker
+    assert "float galleryHeaderAllowance = stackedHeader ? 150f : 110f;" in picker
+    assert "float galleryHeight = Mathf.Max(" in picker
+    assert "contentHeight - galleryHeaderAllowance" in picker
     assert "DrawPortraitGallery(entries, galleryHeight, innerContentWidth);" in creator
     assert "portraitGalleryScrollPosition = GUILayout.BeginScrollView(" in creator
     assert "portraitPickerContentScrollPosition" not in creator
@@ -351,12 +362,14 @@ def test_portrait_picker_client_and_dto_contracts() -> None:
     assert "Attribution: " in field_ui
     assert "License: " in field_ui
     assert "portraitDetailsExpanded" in field_ui
+    assert field_ui.index("GUILayout.EndHorizontal();") < field_ui.index("Source: ")
     assert 'Replace("/", "/\\n").Replace("-", "-\\n")' in creator
     assert "Resources.Load<Texture2D>(" in creator
     assert "ResourcePath(portrait.resource_path)" in creator
     assert "ReportMissingPortraitReference" in creator
     assert "portraitSelectionReference" in apply
     assert "UpdateField(JsonUtility.ToJson(request))" in apply
+    assert "textValues[portraitFieldId] = portraitSelectionReference;" in apply
     assert "ClosePortraitPicker();" in apply
     assert "portraitPickerOpen = false;" in close
     assert "UpdateField" not in close
@@ -415,6 +428,8 @@ def test_creation_layout_uses_shared_density_and_fixed_chrome() -> None:
         'GUILayout.Label(step.label, CreationUiStyles.Title)')
     assert editing.index("CreationUiStyles.PrimaryButton") < editing.index(
         "GUILayout.BeginScrollView")
+    assert "editingAreaHeight - editingChromeBottom - 12f" in editing
+    assert "GUILayout.Height(bodyHeight)" in editing
     assert editing.index("GUILayout.BeginScrollView") < editing.index(
         "foreach (var field in step.fields)")
     assert "GUILayout.EndScrollView();" in editing
