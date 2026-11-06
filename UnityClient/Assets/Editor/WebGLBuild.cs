@@ -50,6 +50,19 @@ public static class WebGLBuild
         const string scriptMarker =
             "      var script = document.createElement(\"script\");";
         string html = File.ReadAllText(indexPath);
+        if (!html.Contains("name=\"viewport\""))
+        {
+            const string headMarker = "  <head>";
+            if (!html.Contains(headMarker))
+            {
+                throw new System.Exception(
+                    "The WebGL template changed; viewport setup could not be applied.");
+            }
+            html = html.Replace(
+                headMarker,
+                headMarker +
+                    "\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">");
+        }
         if (!html.Contains(scriptMarker))
         {
             throw new System.Exception(

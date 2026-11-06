@@ -18,6 +18,14 @@ public sealed class CharacterCreationClient : MonoBehaviour
         Board
     }
 
+    private enum PortraitGenerationState
+    {
+        Closed,
+        Composer,
+        Progress,
+        CandidatePreview
+    }
+
     private ClientScreen screen = ClientScreen.Loading;
     private string apiBaseUrl;
     private string errorMessage = "";
@@ -27,6 +35,8 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private string draftId = "";
     private string characterId = "";
     private bool requestInProgress;
+    private bool savingAppearanceForPortrait;
+    private bool generatingPortrait;
     private bool showOnlyEligibleFeats;
     private RulesetOptionDto[] rulesets = new RulesetOptionDto[0];
     private DraftRecordDto[] savedDrafts = new DraftRecordDto[0];
@@ -73,12 +83,25 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private Texture2D fallbackItemTexture;
     private const int ShopCatalogPageSize = 50;
     private bool portraitPickerOpen;
+    private PortraitGenerationState portraitGenerationState;
     private string portraitFieldId = "";
     private string portraitSelectionReference = "";
     private string portraitSearchText = "";
+    private string portraitGenerationDescription = "";
     private Vector2 portraitGalleryScrollPosition;
+    private Vector2 portraitGenerationScrollPosition;
     private bool portraitDetailsExpanded;
     private Texture2D fallbackPortraitTexture;
+    private Texture2D appliedGeneratedPortraitTexture;
+    private Texture2D candidatePortraitTexture;
+    private string appliedGeneratedPortraitReference = "";
+    private string candidatePortraitId = "";
+    private int candidateSwipeFingerId = -1;
+    private Vector2 candidateSwipeStartPosition;
+    private readonly HashSet<string> loadingGeneratedPortraitUrls =
+        new HashSet<string>();
+    private readonly HashSet<string> failedGeneratedPortraitUrls =
+        new HashSet<string>();
     private readonly HashSet<string> reportedMissingPortraitReferences =
         new HashSet<string>();
     [SerializeField]
@@ -102,7 +125,18 @@ public sealed class CharacterCreationClient : MonoBehaviour
     {
         public PortraitPackDto Pack;
         public PortraitOptionDto Portrait;
+        public GeneratedPortraitDto Generated;
     }
+
+    private enum GeneratedPortraitImageTarget
+    {
+        Candidate,
+        Applied,
+        Library
+    }
+
+    private readonly Dictionary<string, Texture2D> generatedPortraitTextures =
+        new Dictionary<string, Texture2D>();
 
     public void Configure(
         TacticalProjection tactical,
@@ -122,6 +156,18 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 new List<string>(stepSummaryData.stepTitles));
         }
         StartCoroutine(LoadRulesets());
+    }
+
+    private void OnDestroy()
+    {
+        foreach (var texture in generatedPortraitTextures.Values)
+        {
+            if (texture != null)
+            {
+                Destroy(texture);
+            }
+        }
+        generatedPortraitTextures.Clear();
     }
 
     private static string ResolveApiBaseUrl()
@@ -173,6 +219,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 themeControlActive);
             CreationUiStyles.Ensure();
         }
+        if (portraitGenerationState != PortraitGenerationState.Closed)
+        {
+            DrawPortraitGenerationOverlay();
+            RestoreThemeColors();
+            return;
+        }
         if (portraitPickerOpen)
         {
             DrawPortraitPickerOverlay();
@@ -204,7 +256,13 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
             if (requestInProgress)
             {
-                GUILayout.Label("Connecting to local game service...", CreationUiStyles.Status);
+                GUILayout.Label(
+                    savingAppearanceForPortrait
+                        ? "Saving appearance details before portrait generation..."
+                        : generatingPortrait
+                            ? "Generating portrait with ComfyUI..."
+                            : "Connecting to local game service...",
+                    CreationUiStyles.Status);
             }
             else
             {
@@ -444,6 +502,23 @@ public sealed class CharacterCreationClient : MonoBehaviour
         return null;
     }
 
+    // JsonUtility materializes JSON null object fields as empty DTO instances.
+    private static GeneratedPortraitDto NormalizeCandidate(
+        GeneratedPortraitDto candidate)
+    {
+        return candidate != null && !string.IsNullOrEmpty(candidate.candidate_id)
+            ? candidate
+            : null;
+    }
+
+    private static GeneratedPortraitDto NormalizeAppliedPortrait(
+        GeneratedPortraitDto applied)
+    {
+        return applied != null && !string.IsNullOrEmpty(applied.portrait_id)
+            ? applied
+            : null;
+    }
+
     private void ApplyDraft(DraftResponseDto response, bool preserveLocalValues = false)
     {
         draft = response;
@@ -492,6 +567,79 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 {
                     skillRankValues[option.skill_id] = option.ranks;
                 }
+            }
+        }
+
+        var generation = response.portrait_generation;
+        var candidate = generation != null
+            ? NormalizeCandidate(generation.candidate)
+            : null;
+        var applied = generation != null
+            ? NormalizeAppliedPortrait(generation.applied)
+            : null;
+        if (!preserveLocalValues)
+        {
+            portraitGenerationDescription = candidate != null &&
+                candidate.provenance != null
+                ? candidate.provenance.description ?? ""
+                : applied != null && applied.provenance != null
+                    ? applied.provenance.description ?? ""
+                    : "";
+        }
+        if (candidate == null)
+        {
+            candidatePortraitId = "";
+            if (candidatePortraitTexture != null)
+            {
+                Destroy(candidatePortraitTexture);
+                candidatePortraitTexture = null;
+            }
+        }
+        else if (!string.IsNullOrEmpty(candidate.image_url))
+        {
+            if (candidatePortraitId != candidate.candidate_id)
+            {
+                candidatePortraitId = candidate.candidate_id;
+                if (candidatePortraitTexture != null)
+                {
+                    Destroy(candidatePortraitTexture);
+                    candidatePortraitTexture = null;
+                }
+            }
+            if (candidatePortraitTexture == null)
+            {
+                StartCoroutine(LoadGeneratedPortraitImage(
+                    candidate.image_url,
+                    candidate.candidate_id,
+                    GeneratedPortraitImageTarget.Candidate));
+            }
+        }
+        if (applied == null)
+        {
+            appliedGeneratedPortraitReference = "";
+            if (appliedGeneratedPortraitTexture != null)
+            {
+                Destroy(appliedGeneratedPortraitTexture);
+                appliedGeneratedPortraitTexture = null;
+            }
+        }
+        else if (!string.IsNullOrEmpty(applied.image_url))
+        {
+            if (appliedGeneratedPortraitReference != applied.reference)
+            {
+                appliedGeneratedPortraitReference = applied.reference;
+                if (appliedGeneratedPortraitTexture != null)
+                {
+                    Destroy(appliedGeneratedPortraitTexture);
+                    appliedGeneratedPortraitTexture = null;
+                }
+            }
+            if (appliedGeneratedPortraitTexture == null)
+            {
+                StartCoroutine(LoadGeneratedPortraitImage(
+                    applied.image_url,
+                    applied.reference,
+                    GeneratedPortraitImageTarget.Applied));
             }
         }
     }
@@ -1864,9 +2012,23 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawPortraitField(CreationFieldDto field)
     {
+        portraitFieldId = field.id;
         string reference = CurrentPortraitReference(field.id);
         var entry = FindPortraitEntry(reference);
-        if (!string.IsNullOrEmpty(reference) && entry == null)
+        var generation = draft != null ? draft.portrait_generation : null;
+        var configuration = generation != null ? generation.configuration : null;
+        var candidate = generation != null
+            ? NormalizeCandidate(generation.candidate)
+            : null;
+        var applied = generation != null
+            ? NormalizeAppliedPortrait(generation.applied)
+            : null;
+        bool selectedGenerated =
+            applied != null && applied.reference == reference;
+        if (!string.IsNullOrEmpty(reference) &&
+            entry == null &&
+            !selectedGenerated &&
+            !reference.StartsWith("generated-portrait:", StringComparison.Ordinal))
         {
             ReportMissingPortraitReference(reference, "no bundled catalog entry");
         }
@@ -1876,13 +2038,17 @@ public sealed class CharacterCreationClient : MonoBehaviour
         GUILayout.Label(
             entry != null
                 ? LoadPortraitTexture(entry.Portrait)
-                : GetFallbackPortraitTexture(),
+                : selectedGenerated && appliedGeneratedPortraitTexture != null
+                    ? appliedGeneratedPortraitTexture
+                    : GetFallbackPortraitTexture(),
             GUILayout.Width(76f),
             GUILayout.Height(96f));
         GUILayout.BeginVertical();
         GUILayout.Label(
             entry != null
                 ? entry.Portrait.name
+                : selectedGenerated
+                    ? "Generated portrait"
                 : string.IsNullOrEmpty(reference)
                     ? "No portrait selected"
                     : "Selected portrait unavailable",
@@ -1896,6 +2062,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 portraitDetailsExpanded = !portraitDetailsExpanded;
             }
         }
+        else if (selectedGenerated && CreationUiStyles.TertiaryButton(
+            portraitDetailsExpanded ? "Hide portrait details" : "Portrait details"))
+        {
+            portraitDetailsExpanded = !portraitDetailsExpanded;
+        }
         else if (!string.IsNullOrEmpty(reference))
         {
             GUILayout.Label(reference, CreationUiStyles.Caption);
@@ -1906,9 +2077,34 @@ public sealed class CharacterCreationClient : MonoBehaviour
             portraitSelectionReference = reference;
             portraitSearchText = "";
             portraitGalleryScrollPosition = Vector2.zero;
+            failedGeneratedPortraitUrls.Clear();
             errorMessage = "";
             portraitPickerOpen = true;
         }
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        if (candidate != null)
+        {
+            if (CreationUiStyles.SecondaryButton("Review generated portrait"))
+            {
+                portraitGenerationState = PortraitGenerationState.CandidatePreview;
+            }
+        }
+        else
+        {
+            GUI.enabled = previousEnabled &&
+                configuration != null &&
+                configuration.comfyui_configured &&
+                !requestInProgress;
+            if (CreationUiStyles.SecondaryButton("Generate portrait"))
+            {
+                portraitFieldId = field.id;
+                errorMessage = "";
+                portraitGenerationState = PortraitGenerationState.Composer;
+                portraitGenerationScrollPosition = Vector2.zero;
+            }
+        }
+        GUI.enabled = previousEnabled;
         GUILayout.EndVertical();
         GUILayout.EndHorizontal();
         if (entry != null && portraitDetailsExpanded)
@@ -1927,6 +2123,347 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 WrapPortraitPath(entry.Portrait.license_url),
                 CreationUiStyles.Caption);
         }
+        else if (selectedGenerated && portraitDetailsExpanded)
+        {
+            DrawGeneratedPortraitProvenance(applied.provenance);
+        }
+        if (candidate != null)
+        {
+            if (candidatePortraitTexture == null)
+            {
+                GUILayout.Label("Loading portrait preview...", CreationUiStyles.Caption);
+            }
+            DrawPortraitCandidate(candidate, field.id);
+        }
+        GUILayout.EndVertical();
+    }
+
+    private void DrawPortraitGenerationOverlay()
+    {
+        var screenRect = new Rect(0f, 0f, Screen.width, Screen.height);
+        Color previousColor = GUI.color;
+        GUI.color = new Color(0.035f, 0.03f, 0.04f, 0.97f);
+        GUI.DrawTexture(screenRect, Texture2D.whiteTexture);
+        GUI.color = previousColor;
+        GUI.Box(screenRect, GUIContent.none, CreationUiStyles.Frame);
+
+        float margin = Screen.width < UiLayout.SmMax ? 8f : 16f;
+        float contentWidth = Mathf.Max(0f, Screen.width - 2f * margin);
+        const float footerHeight = 72f;
+        float contentHeight = Mathf.Max(
+            0f,
+            Screen.height - 2f * margin - footerHeight);
+        GUILayout.BeginArea(new Rect(margin, margin, contentWidth, contentHeight));
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.Label(
+            portraitGenerationState == PortraitGenerationState.CandidatePreview
+                ? "Generated portrait"
+                : "Generate a portrait",
+            CreationUiStyles.Title);
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            GUILayout.Label(errorMessage, ErrorStyle());
+        }
+        if (portraitGenerationState == PortraitGenerationState.Composer)
+        {
+            portraitGenerationScrollPosition = GUILayout.BeginScrollView(
+                portraitGenerationScrollPosition,
+                false,
+                true,
+                GUILayout.ExpandHeight(true));
+            DrawPortraitGenerationComposer();
+            GUILayout.EndScrollView();
+        }
+        else if (portraitGenerationState == PortraitGenerationState.Progress)
+        {
+            DrawPortraitGenerationProgress();
+        }
+        else if (portraitGenerationState == PortraitGenerationState.CandidatePreview)
+        {
+            var generation = draft != null ? draft.portrait_generation : null;
+            var candidate = generation != null
+                ? NormalizeCandidate(generation.candidate)
+                : null;
+            DrawPortraitCandidateOverlay(candidate);
+        }
+        GUILayout.EndVertical();
+        GUILayout.EndArea();
+
+        GUILayout.BeginArea(new Rect(
+            margin,
+            Screen.height - margin - footerHeight,
+            contentWidth,
+            footerHeight));
+        GUILayout.BeginHorizontal();
+        bool previousEnabled = GUI.enabled;
+        var currentGeneration = draft != null ? draft.portrait_generation : null;
+        var currentCandidate = currentGeneration != null
+            ? NormalizeCandidate(currentGeneration.candidate)
+            : null;
+        if (portraitGenerationState == PortraitGenerationState.Composer)
+        {
+            GUI.enabled = previousEnabled && !requestInProgress;
+            if (CreationUiStyles.TertiaryButton("Close"))
+            {
+                portraitGenerationState = PortraitGenerationState.Closed;
+                errorMessage = "";
+            }
+            GUILayout.FlexibleSpace();
+            var configuration = currentGeneration != null
+                ? currentGeneration.configuration
+                : null;
+            GUI.enabled = previousEnabled &&
+                !requestInProgress &&
+                configuration != null &&
+                configuration.comfyui_configured;
+            if (CreationUiStyles.PrimaryButton("Generate portrait"))
+            {
+                portraitGenerationState = PortraitGenerationState.Progress;
+                StartCoroutine(GeneratePortrait(portraitFieldId));
+            }
+        }
+        else if (portraitGenerationState == PortraitGenerationState.CandidatePreview &&
+            currentCandidate != null &&
+            Screen.width >= UiLayout.MdMax)
+        {
+            GUILayout.FlexibleSpace();
+            GUI.enabled = previousEnabled &&
+                !requestInProgress &&
+                candidatePortraitTexture != null;
+            if (CreationUiStyles.SecondaryButton("Use"))
+            {
+                StartCoroutine(UsePortraitCandidate(
+                    currentCandidate.candidate_id,
+                    portraitFieldId));
+            }
+            if (CreationUiStyles.TertiaryButton("Discard"))
+            {
+                StartCoroutine(DiscardPortraitCandidate(currentCandidate.candidate_id));
+            }
+        }
+        GUI.enabled = previousEnabled;
+        GUILayout.EndHorizontal();
+        GUILayout.EndArea();
+    }
+
+    private void DrawPortraitGenerationProgress()
+    {
+        GUILayout.FlexibleSpace();
+        GUILayout.Label(
+            savingAppearanceForPortrait
+                ? "Saving appearance details before portrait generation..."
+                : "Generating portrait with ComfyUI...",
+            CreationUiStyles.Status);
+        GUILayout.FlexibleSpace();
+    }
+
+    private void DrawPortraitCandidateOverlay(GeneratedPortraitDto candidate)
+    {
+        if (candidate == null)
+        {
+            GUILayout.Label(
+                "The pending generated portrait is no longer available.",
+                CreationUiStyles.Body);
+            return;
+        }
+        bool mobileLayout = Screen.width < UiLayout.MdMax;
+        if (mobileLayout)
+        {
+            GUILayout.Label(
+                "< Swipe left: discard     Swipe right: use >",
+                CreationUiStyles.Section);
+        }
+        Rect imageRect = GUILayoutUtility.GetRect(
+            100f,
+            100f,
+            GUILayout.ExpandWidth(true),
+            GUILayout.ExpandHeight(true));
+        HandleCandidatePreviewTouch(imageRect, candidate);
+        if (candidatePortraitTexture != null)
+        {
+            GUI.DrawTexture(
+                imageRect,
+                candidatePortraitTexture,
+                ScaleMode.ScaleToFit,
+                true);
+        }
+        else
+        {
+            GUI.Label(
+                imageRect,
+                "Loading portrait preview...",
+                CreationUiStyles.Status);
+        }
+        GUILayout.Label(
+            candidate.provenance != null
+                ? candidate.provenance.description
+                : "",
+            CreationUiStyles.Caption);
+    }
+
+    private void HandleCandidatePreviewTouch(
+        Rect imageRect,
+        GeneratedPortraitDto candidate)
+    {
+        if (Screen.width >= UiLayout.MdMax ||
+            portraitGenerationState != PortraitGenerationState.CandidatePreview ||
+            candidate == null ||
+            candidatePortraitTexture == null ||
+            candidatePortraitId != candidate.candidate_id ||
+            requestInProgress)
+        {
+            candidateSwipeFingerId = -1;
+            return;
+        }
+        for (int index = 0; index < Input.touchCount; index++)
+        {
+            Touch touch = Input.GetTouch(index);
+            Vector2 guiPosition = new Vector2(
+                touch.position.x,
+                Screen.height - touch.position.y);
+            if (touch.phase == TouchPhase.Began)
+            {
+                if (imageRect.Contains(guiPosition))
+                {
+                    candidateSwipeFingerId = touch.fingerId;
+                    candidateSwipeStartPosition = guiPosition;
+                }
+                continue;
+            }
+            if (touch.fingerId != candidateSwipeFingerId)
+            {
+                continue;
+            }
+            if (touch.phase == TouchPhase.Canceled)
+            {
+                candidateSwipeFingerId = -1;
+                continue;
+            }
+            if (touch.phase != TouchPhase.Ended)
+            {
+                continue;
+            }
+
+            Vector2 displacement = guiPosition - candidateSwipeStartPosition;
+            candidateSwipeFingerId = -1;
+            float horizontalDistance = Mathf.Abs(displacement.x);
+            float minimumDistance = Mathf.Max(72f, Screen.width * 0.18f);
+            if (horizontalDistance < minimumDistance ||
+                horizontalDistance <= Mathf.Abs(displacement.y) * 1.25f)
+            {
+                continue;
+            }
+            if (displacement.x > 0f)
+            {
+                StartCoroutine(UsePortraitCandidate(
+                    candidate.candidate_id,
+                    portraitFieldId));
+            }
+            else
+            {
+                StartCoroutine(DiscardPortraitCandidate(candidate.candidate_id));
+            }
+            return;
+        }
+    }
+
+    private void DrawPortraitGenerationComposer()
+    {
+        var generation = draft != null ? draft.portrait_generation : null;
+        var configuration = generation != null ? generation.configuration : null;
+        GUILayout.Label("Optional image description", CreationUiStyles.FieldLabel);
+        portraitGenerationDescription = GUILayout.TextArea(
+            portraitGenerationDescription,
+            CreationUiStyles.Input,
+            GUILayout.ExpandWidth(true),
+            GUILayout.Height(96f));
+        GUILayout.Label(
+            portraitGenerationDescription.Length + " / 1000 characters",
+            CreationUiStyles.Caption);
+        if (configuration != null && configuration.comfyui_configured)
+        {
+            GUILayout.Label(
+                "ComfyUI: " + configuration.comfyui_destination +
+                (string.IsNullOrEmpty(configuration.comfyui_workflow)
+                    ? ""
+                    : " · " + configuration.comfyui_workflow),
+                CreationUiStyles.Caption);
+        }
+        else
+        {
+            GUILayout.Label(
+                "ComfyUI is not configured. Restart the local service with " +
+                "--comfyui-workflow to enable portrait generation.",
+                CreationUiStyles.Caption);
+        }
+        GUILayout.Label(
+            configuration != null && configuration.ollama_enabled
+                ? "Ollama prompt refinement: enabled (" +
+                    configuration.ollama_model + " at " +
+                    configuration.ollama_destination + ")."
+                : "Ollama prompt refinement: disabled.",
+            CreationUiStyles.Caption);
+        GUILayout.Label(
+            "On request, your description and selected race/species, class/career/" +
+            "homeworld/origin, gear, and appearance choices are sent to the configured " +
+            "services. Ability scores and skill ranks are excluded.",
+            CreationUiStyles.Caption);
+    }
+
+    private void DrawGeneratedPortraitProvenance(
+        GeneratedPortraitProvenanceDto provenance)
+    {
+        if (provenance == null)
+        {
+            GUILayout.Label("Generation provenance is unavailable.", CreationUiStyles.Caption);
+            return;
+        }
+        GUILayout.Label("Source: " + provenance.source, CreationUiStyles.Caption);
+        GUILayout.Label("Workflow: " + provenance.workflow, CreationUiStyles.Caption);
+        GUILayout.Label("Image model: " + provenance.image_model, CreationUiStyles.Caption);
+        if (!string.IsNullOrEmpty(provenance.ollama_model))
+        {
+            GUILayout.Label("Prompt model: " + provenance.ollama_model, CreationUiStyles.Caption);
+            GUILayout.Label(
+                "Prompt model terms: " + provenance.ollama_terms,
+                CreationUiStyles.Caption);
+        }
+        GUILayout.Label("Source/usage terms: " + provenance.source_terms, CreationUiStyles.Caption);
+        if (!string.IsNullOrEmpty(provenance.description))
+        {
+            GUILayout.Label("Description: " + provenance.description, CreationUiStyles.Caption);
+        }
+    }
+
+    private void DrawPortraitCandidate(GeneratedPortraitDto candidate, string fieldId)
+    {
+        GUILayout.BeginVertical(GUI.skin.box);
+        GUILayout.Label("Portrait preview", CreationUiStyles.Section);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(
+            candidatePortraitTexture != null
+                ? candidatePortraitTexture
+                : GetFallbackPortraitTexture(),
+            GUILayout.Width(76f),
+            GUILayout.Height(96f));
+        GUILayout.BeginVertical();
+        GUILayout.Label("Candidate portrait", CreationUiStyles.Body);
+        DrawGeneratedPortraitProvenance(candidate.provenance);
+        GUILayout.BeginHorizontal();
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        if (CreationUiStyles.SecondaryButton("Use"))
+        {
+            StartCoroutine(UsePortraitCandidate(candidate.candidate_id, fieldId));
+        }
+        if (CreationUiStyles.TertiaryButton("Discard"))
+        {
+            StartCoroutine(DiscardPortraitCandidate(candidate.candidate_id));
+        }
+        GUI.enabled = previousEnabled;
+        GUILayout.EndHorizontal();
+        GUILayout.EndVertical();
+        GUILayout.EndHorizontal();
         GUILayout.EndVertical();
     }
 
@@ -2050,7 +2587,39 @@ public sealed class CharacterCreationClient : MonoBehaviour
                 });
             }
         }
+        foreach (var portrait in draft?.generated_portraits
+            ?? new GeneratedPortraitDto[0])
+        {
+            if (!MatchesGeneratedPortraitSearch(portrait, query))
+            {
+                continue;
+            }
+            entries.Add(new PortraitGalleryEntry
+            {
+                Generated = portrait
+            });
+        }
         return entries;
+    }
+
+    private static bool MatchesGeneratedPortraitSearch(
+        GeneratedPortraitDto portrait,
+        string query)
+    {
+        if (portrait == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(query) ||
+            ContainsShopSearchText(portrait.reference, query) ||
+            ContainsShopSearchText(portrait.provenance?.description, query) ||
+            ContainsShopSearchText(portrait.provenance?.source, query) ||
+            ContainsShopSearchText(portrait.provenance?.workflow, query) ||
+            ContainsShopSearchText(portrait.provenance?.image_model, query))
+        {
+            return true;
+        }
+        return false;
     }
 
     private static bool MatchesPortraitSearch(
@@ -2089,7 +2658,6 @@ public sealed class CharacterCreationClient : MonoBehaviour
             GUI.skin.box,
             GUILayout.Width(width),
             GUILayout.Height(height));
-        GUILayout.Label("Portrait gallery", CreationUiStyles.Section);
         float scrollHeight = Mathf.Max(60f, height - 42f);
         portraitGalleryScrollPosition = GUILayout.BeginScrollView(
             portraitGalleryScrollPosition,
@@ -2104,24 +2672,53 @@ public sealed class CharacterCreationClient : MonoBehaviour
         }
         else
         {
-            for (int index = 0; index < entries.Count; index += columns)
+            var bundledEntries = new List<PortraitGalleryEntry>();
+            var generatedEntries = new List<PortraitGalleryEntry>();
+            foreach (var entry in entries)
             {
-                GUILayout.BeginHorizontal();
-                for (int column = 0; column < columns; column++)
-                {
-                    int entryIndex = index + column;
-                    if (entryIndex >= entries.Count)
-                    {
-                        GUILayout.FlexibleSpace();
-                        continue;
-                    }
-                    DrawPortraitTile(entries[entryIndex], tileSize);
-                }
-                GUILayout.EndHorizontal();
+                (entry.Generated != null ? generatedEntries : bundledEntries).Add(entry);
             }
+            DrawPortraitGallerySection(
+                "Portrait gallery",
+                bundledEntries,
+                columns,
+                tileSize);
+            DrawPortraitGallerySection(
+                "Generated portraits",
+                generatedEntries,
+                columns,
+                tileSize);
         }
         GUILayout.EndScrollView();
         GUILayout.EndVertical();
+    }
+
+    private void DrawPortraitGallerySection(
+        string title,
+        List<PortraitGalleryEntry> entries,
+        int columns,
+        float tileSize)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+        GUILayout.Label(title, CreationUiStyles.Section);
+        for (int index = 0; index < entries.Count; index += columns)
+        {
+            GUILayout.BeginHorizontal();
+            for (int column = 0; column < columns; column++)
+            {
+                int entryIndex = index + column;
+                if (entryIndex >= entries.Count)
+                {
+                    GUILayout.FlexibleSpace();
+                    continue;
+                }
+                DrawPortraitTile(entries[entryIndex], tileSize);
+            }
+            GUILayout.EndHorizontal();
+        }
     }
 
     private static int PortraitGalleryColumns(float width)
@@ -2136,23 +2733,88 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void DrawPortraitTile(PortraitGalleryEntry entry, float tileSize)
     {
-        bool isSelected =
-            entry.Portrait.asset_reference == portraitSelectionReference ||
-            entry.Portrait.asset_reference == CurrentPortraitReference(portraitFieldId);
+        string reference = entry.Generated != null
+            ? entry.Generated.reference
+            : entry.Portrait.asset_reference;
+        bool isSelected = reference == portraitSelectionReference ||
+            reference == CurrentPortraitReference(portraitFieldId);
+        GUIContent content;
+        if (entry.Generated != null)
+        {
+            content = new GUIContent(
+                LoadGeneratedPortraitTexture(entry.Generated),
+                GeneratedPortraitTooltip(entry.Generated));
+        }
+        else
+        {
+            content = new GUIContent(
+                LoadPortraitTexture(entry.Portrait),
+                entry.Portrait.name);
+        }
         bool previousEnabled = GUI.enabled;
         GUI.enabled = previousEnabled && !requestInProgress;
         if (GUILayout.Button(
-            new GUIContent(
-                LoadPortraitTexture(entry.Portrait),
-                entry.Portrait.name),
+            content,
             isSelected ? CreationUiStyles.Primary : CreationUiStyles.Selection,
             GUILayout.Width(tileSize),
             GUILayout.Height(tileSize)))
         {
-            portraitSelectionReference = entry.Portrait.asset_reference;
+            portraitSelectionReference = reference;
             StartCoroutine(ApplySelectedPortrait());
         }
         GUI.enabled = previousEnabled;
+    }
+
+    private Texture2D LoadGeneratedPortraitTexture(GeneratedPortraitDto portrait)
+    {
+        if (portrait == null || string.IsNullOrEmpty(portrait.reference))
+        {
+            return GetFallbackPortraitTexture();
+        }
+        if (generatedPortraitTextures.TryGetValue(
+            portrait.reference,
+            out var texture) &&
+            texture != null)
+        {
+            return texture;
+        }
+        if (appliedGeneratedPortraitReference == portrait.reference &&
+            appliedGeneratedPortraitTexture != null)
+        {
+            return appliedGeneratedPortraitTexture;
+        }
+        if (!string.IsNullOrEmpty(portrait.image_url))
+        {
+            string url = apiBaseUrl + portrait.image_url;
+            if (!failedGeneratedPortraitUrls.Contains(url))
+            {
+                StartCoroutine(LoadGeneratedPortraitImage(
+                    portrait.image_url,
+                    portrait.reference,
+                    GeneratedPortraitImageTarget.Library));
+            }
+        }
+        return GetFallbackPortraitTexture();
+    }
+
+    private static string GeneratedPortraitTooltip(GeneratedPortraitDto portrait)
+    {
+        var provenance = portrait != null ? portrait.provenance : null;
+        if (provenance == null)
+        {
+            return "Generated portrait";
+        }
+        string description = string.IsNullOrEmpty(provenance.description)
+            ? ""
+            : provenance.description;
+        string source = string.IsNullOrEmpty(provenance.source)
+            ? ""
+            : "\nSource: " + provenance.source;
+        string terms = string.IsNullOrEmpty(provenance.source_terms)
+            ? ""
+            : "\nUsage terms: " + provenance.source_terms;
+        return "Generated portrait" + source + terms +
+            (string.IsNullOrEmpty(description) ? "" : "\n" + description);
     }
 
     private static string WrapPortraitPath(string value)
@@ -2275,6 +2937,189 @@ public sealed class CharacterCreationClient : MonoBehaviour
             textValues[portraitFieldId] = portraitSelectionReference;
             ClosePortraitPicker();
         }
+    }
+
+    private IEnumerator GeneratePortrait(string fieldId)
+    {
+        errorMessage = "";
+        int stepIndex = FindStepIndex(draft.current_step);
+        if (stepIndex < 0)
+        {
+            errorMessage = "The current appearance step is unavailable.";
+            portraitGenerationState = PortraitGenerationState.Composer;
+            yield break;
+        }
+        portraitFieldId = fieldId;
+        if (portraitGenerationDescription.Length > 1000)
+        {
+            errorMessage = "Portrait description must contain at most 1000 characters.";
+            portraitGenerationState = PortraitGenerationState.Composer;
+            yield break;
+        }
+
+        savingAppearanceForPortrait = true;
+        yield return SaveCurrentStepFields(stepIndex);
+        savingAppearanceForPortrait = false;
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            portraitGenerationState = PortraitGenerationState.Composer;
+            yield break;
+        }
+
+        var request = new GeneratePortraitRequestDto
+        {
+            description = portraitGenerationDescription
+        };
+        generatingPortrait = true;
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/portrait-candidates",
+            JsonUtility.ToJson(request),
+            (status, response) =>
+            {
+                if (status == 201 || IsSuccess(status))
+                {
+                    var updated = JsonUtility.FromJson<DraftResponseDto>(response);
+                    ApplyDraft(updated, true);
+                    generatingPortrait = false;
+                    if (updated?.portrait_generation != null &&
+                        NormalizeCandidate(updated.portrait_generation.candidate) != null)
+                    {
+                        portraitGenerationState = PortraitGenerationState.CandidatePreview;
+                    }
+                    else
+                    {
+                        errorMessage = "The service did not return a portrait candidate.";
+                        portraitGenerationState = PortraitGenerationState.Composer;
+                    }
+                }
+                else
+                {
+                    generatingPortrait = false;
+                    SetError(response);
+                    portraitGenerationState = PortraitGenerationState.Composer;
+                }
+            });
+    }
+
+    private IEnumerator UsePortraitCandidate(string candidateId, string fieldId)
+    {
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) +
+                "/portrait-candidates/" + Uri.EscapeDataString(candidateId) + "/apply",
+            "{}",
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    SetError(response);
+                    return;
+                }
+                var updated = JsonUtility.FromJson<DraftResponseDto>(response);
+                ApplyDraft(updated, true);
+                if (serverFieldValues.TryGetValue(fieldId, out var fieldValue))
+                {
+                    textValues[fieldId] = fieldValue.text_value ?? "";
+                }
+                portraitGenerationState = PortraitGenerationState.Closed;
+                errorMessage = "";
+            });
+    }
+
+    private IEnumerator DiscardPortraitCandidate(string candidateId)
+    {
+        yield return SendRequest(
+            "POST",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) +
+                "/portrait-candidates/" + Uri.EscapeDataString(candidateId) + "/discard",
+            "{}",
+            (status, response) =>
+            {
+                if (IsSuccess(status))
+                {
+                    ApplyDraft(JsonUtility.FromJson<DraftResponseDto>(response), true);
+                    portraitGenerationState = PortraitGenerationState.Closed;
+                    errorMessage = "";
+                }
+                else
+                {
+                    SetError(response);
+                }
+            });
+    }
+
+    private IEnumerator LoadGeneratedPortraitImage(
+        string imagePath,
+        string reference,
+        GeneratedPortraitImageTarget target)
+    {
+        string url = apiBaseUrl + imagePath;
+        if (!loadingGeneratedPortraitUrls.Add(url))
+        {
+            yield break;
+        }
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                failedGeneratedPortraitUrls.Add(url);
+                SetError("Could not load generated portrait image: " + request.error);
+            }
+            else if (string.IsNullOrEmpty(request.GetResponseHeader("Content-Type")) ||
+                !request.GetResponseHeader("Content-Type").StartsWith(
+                "image/",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                failedGeneratedPortraitUrls.Add(url);
+                SetError("The character service returned a non-image portrait response.");
+            }
+            else
+            {
+                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!ImageConversion.LoadImage(texture, request.downloadHandler.data, false))
+                {
+                    Destroy(texture);
+                    failedGeneratedPortraitUrls.Add(url);
+                    SetError("The generated portrait response could not be decoded.");
+                }
+                else if (target == GeneratedPortraitImageTarget.Applied &&
+                    appliedGeneratedPortraitReference == reference)
+                {
+                    if (appliedGeneratedPortraitTexture != null)
+                    {
+                        Destroy(appliedGeneratedPortraitTexture);
+                    }
+                    appliedGeneratedPortraitTexture = texture;
+                }
+                else if (target == GeneratedPortraitImageTarget.Candidate &&
+                    candidatePortraitId == reference)
+                {
+                    if (candidatePortraitTexture != null)
+                    {
+                        Destroy(candidatePortraitTexture);
+                    }
+                    candidatePortraitTexture = texture;
+                }
+                else if (target == GeneratedPortraitImageTarget.Library)
+                {
+                    if (generatedPortraitTextures.TryGetValue(
+                        reference,
+                        out var previousTexture) &&
+                        previousTexture != null)
+                    {
+                        Destroy(previousTexture);
+                    }
+                    generatedPortraitTextures[reference] = texture;
+                }
+                else
+                {
+                    Destroy(texture);
+                }
+            }
+        }
+        loadingGeneratedPortraitUrls.Remove(url);
     }
 
     private void DrawSkillRanks(CreationFieldDto field)

@@ -21,6 +21,12 @@ from character.store import (
 )
 from character.templates import CharacterTemplate
 from character.workflow import CreationWorkflow
+from clients.portrait_generation import (
+    GeneratedPortraitStorage,
+    PortraitGenerationError,
+    PortraitGenerationService,
+    PortraitGenerationUnavailableError,
+)
 from rules.package_resolver import (
     Package,
     PackageResolutionError,
@@ -36,9 +42,16 @@ from session.runtime import Controller, Session
 
 
 class CharacterCreationApplication:
-    def __init__(self, project_root: Path, data_directory: Path) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        data_directory: Path,
+        portrait_generation: PortraitGenerationService | None = None,
+    ) -> None:
         self.project_root = project_root
         self.store = CharacterStore(data_directory)
+        self.portrait_storage = GeneratedPortraitStorage(data_directory)
+        self.portrait_generation = portrait_generation
         self.portrait_packs = load_portrait_packs(
             project_root / "content" / "portrait-packs"
         )
@@ -136,10 +149,73 @@ class CharacterCreationApplication:
             return self._dispatch(method.upper(), route, body)
         except FileNotFoundError:
             return self._error(404, "not-found", "The requested record was not found")
+        except PortraitGenerationUnavailableError as error:
+            return self._error(503, "portrait-generation-unavailable", str(error))
+        except PortraitGenerationError as error:
+            return self._error(502, "portrait-generation-failed", str(error))
         except PackageVersionUnavailableError as error:
             return self._error(409, "package-version-unavailable", str(error))
         except (DefinitionValidationError, PackageResolutionError, ValueError) as error:
             return self._error(400, "invalid-request", str(error))
+        except OSError as error:
+            return self._error(500, "storage-failure", str(error))
+
+    def handle_image(
+        self,
+        method: str,
+        path: str,
+    ) -> tuple[int, bytes, str]:
+        route = unquote(urlsplit(path).path)
+        try:
+            if method.upper() != "GET":
+                return 405, b"", "application/octet-stream"
+            library_suffix = route.removeprefix(
+                "/api/portraits/generated/"
+            ).split("/")
+            if (
+                route.startswith("/api/portraits/generated/")
+                and len(library_suffix) == 2
+                and library_suffix[1] == "image"
+            ):
+                data, content_type, _ = self.portrait_storage.read_library_asset(
+                    library_suffix[0]
+                )
+                return 200, data, content_type
+            suffix = route.removeprefix("/api/drafts/").split("/")
+            if (
+                len(suffix) == 4
+                and suffix[1] == "portrait-candidates"
+                and suffix[3] == "image"
+            ):
+                draft_id, candidate_id = suffix[0], suffix[2]
+                self._load_workflow(draft_id)
+                data, content_type, _ = self.portrait_storage.read_candidate(
+                    draft_id,
+                    candidate_id,
+                )
+                return 200, data, content_type
+            if (
+                len(suffix) == 4
+                and suffix[1] == "portraits"
+                and suffix[3] == "image"
+            ):
+                draft_id, portrait_id = suffix[0], suffix[2]
+                workflow = self._load_workflow(draft_id)
+                reference = workflow.presentation.portrait
+                if reference != f"generated-portrait:{portrait_id}":
+                    raise FileNotFoundError(portrait_id)
+                data, content_type, _ = self.portrait_storage.read_applied(
+                    draft_id,
+                    reference,
+                )
+                return 200, data, content_type
+            return 404, b"", "application/octet-stream"
+        except FileNotFoundError:
+            return 404, b"", "application/octet-stream"
+        except ValueError:
+            return 400, b"", "application/octet-stream"
+        except OSError:
+            return 500, b"", "application/octet-stream"
 
     def _dispatch(
         self, method: str, route: str, body: dict[str, Any]
@@ -167,6 +243,64 @@ class CharacterCreationApplication:
             if len(suffix) == 1 and method == "PUT":
                 workflow.set_field(body.get("field_id"), body.get("value"))
                 self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 2
+                and suffix[1] == "portrait-candidates"
+                and method == "POST"
+            ):
+                if set(body) - {"description"}:
+                    raise ValueError("Portrait generation accepts only description")
+                description = body.get("description", "")
+                if not isinstance(description, str):
+                    raise ValueError("description must be text")
+                if self.portrait_generation is None:
+                    raise PortraitGenerationUnavailableError(
+                        "Configure ComfyUI with --comfyui-workflow before "
+                        "generating portraits"
+                    )
+                if self.portrait_storage.list_candidates(draft_id):
+                    return self._error(
+                        409,
+                        "portrait-candidate-exists",
+                        "Use or discard the current portrait candidate first",
+                    )
+                image, provenance = self.portrait_generation.generate(
+                    workflow,
+                    description,
+                )
+                self.portrait_storage.save_candidate(
+                    draft_id,
+                    image,
+                    provenance,
+                )
+                return 201, self._draft_payload(workflow)
+            if (
+                len(suffix) == 4
+                and suffix[1] == "portrait-candidates"
+                and suffix[3] == "apply"
+                and method == "POST"
+            ):
+                if body:
+                    raise ValueError("Portrait apply requests do not accept a body")
+                reference, _ = self.portrait_storage.promote_candidate(
+                    draft_id,
+                    suffix[2],
+                )
+                workflow.configure_appearance(portrait=reference)
+                self.store.save_draft(workflow)
+                self.portrait_storage.delete_candidate(draft_id, suffix[2])
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 4
+                and suffix[1] == "portrait-candidates"
+                and suffix[3] == "discard"
+                and method == "POST"
+            ):
+                if body:
+                    raise ValueError("Portrait discard requests do not accept a body")
+                self.portrait_storage.promote_candidate(draft_id, suffix[2])
+                self.portrait_storage.delete_candidate(draft_id, suffix[2])
                 return 200, self._draft_payload(workflow)
             if len(suffix) == 2 and suffix[1] == "roll" and method == "POST":
                 if set(body) != {"field_id"}:
@@ -535,12 +669,64 @@ class CharacterCreationApplication:
                             "details": deepcopy(item_def.get("details", [])),
                         }
                     )
+        portrait_generation = (
+            self.portrait_generation.configuration_payload()
+            if self.portrait_generation is not None
+            else {
+                "comfyui_configured": False,
+                "comfyui_destination": "",
+                "comfyui_workflow": "",
+                "comfyui_model": "",
+                "comfyui_terms": "not supplied",
+                "ollama_enabled": False,
+                "ollama_destination": "",
+                "ollama_model": "",
+                "ollama_terms": "not supplied",
+            }
+        )
+        candidates = self.portrait_storage.list_candidates(workflow.character_id)
+        candidate = None
+        if candidates:
+            candidate = deepcopy(candidates[-1])
+            candidate["image_url"] = (
+                f"/api/drafts/{workflow.character_id}/portrait-candidates/"
+                f"{candidate['candidate_id']}/image"
+            )
+        generated_portraits = self.portrait_storage.list_library()
+        for portrait in generated_portraits:
+            portrait["image_url"] = (
+                f"/api/portraits/generated/{portrait['portrait_id']}/image"
+            )
+        applied = None
+        if isinstance(presentation.get("portrait"), str) and presentation["portrait"].startswith(
+            "generated-portrait:"
+        ):
+            applied = self.portrait_storage.library_record(
+                presentation["portrait"]
+            )
+            applied_in_library = applied is not None
+            if applied is None:
+                applied = self.portrait_storage.applied_record(
+                    workflow.character_id,
+                    presentation["portrait"],
+                )
+            if applied is not None:
+                if applied_in_library:
+                    applied["image_url"] = (
+                        f"/api/portraits/generated/{applied['portrait_id']}/image"
+                    )
+                else:
+                    applied["image_url"] = (
+                        f"/api/drafts/{workflow.character_id}/portraits/"
+                        f"{applied['portrait_id']}/image"
+                    )
         return {
             "draft": record,
             "current_step": workflow.current_step,
             "field_values": field_values,
             "review": workflow.review(),
             "portrait_packs": self._portrait_packs_payload(workflow.ruleset_id),
+            "generated_portraits": generated_portraits,
             "equipment_shop": (
                 {
                     **deepcopy(workflow.equipment_shop),
@@ -551,6 +737,11 @@ class CharacterCreationApplication:
                 else None
             ),
             "theme": flow_payload["theme"],
+            "portrait_generation": {
+                "configuration": portrait_generation,
+                "candidate": candidate,
+                "applied": applied,
+            },
         }
 
     def _portrait_packs_payload(self, ruleset_id: str) -> list[dict[str, Any]]:

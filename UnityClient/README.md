@@ -32,6 +32,46 @@ rerollable. The dice and results are generated and retained by the local
 service; other rulesets expose rolling only when their package declares a
 supported method.
 
+### On-demand portrait generation
+
+Portrait generation is disabled until the local Python service is given a
+ComfyUI API-export workflow. Export a workflow from ComfyUI with **File >
+Export (API)**, then replace the positive prompt node's text value with the
+literal `{{CHARACTER_PROMPT}}` placeholder. Start the service with that
+workflow path:
+
+```sh
+python3 tools/serve_webgl.py \
+  --directory UnityClient/Build/WebGL \
+  --port 8000 \
+  --data-directory ~/.universal-rpg-board/data \
+  --comfyui-url http://127.0.0.1:8188 \
+  --comfyui-workflow ~/.config/comfyui/portrait-api.json \
+    --comfyui-model your-checkpoint-name \
+    --comfyui-terms "terms supplied by the checkpoint source"
+```
+
+The optional `--comfyui-model` value is a provenance label; when omitted, the
+service records model identifiers found in the workflow or `not supplied`.
+Ollama refinement is opt-in with `--ollama-model <model>` and an optional
+`--ollama-url` (default `http://127.0.0.1:11434`). Without Ollama, or if it is
+unavailable, the service sends its deterministic prompt directly to ComfyUI.
+Use `--ollama-terms` to record usage terms supplied for the optional prompt
+model. These term values are provenance supplied by the operator; the service
+does not verify them.
+
+The client discloses the configured service destinations and the visual data
+sent before generation. A request contains the optional description and the
+draft's selected race/species, class/career/homeworld/origin, gear, and
+appearance details; ability scores and skill ranks are excluded. The client
+does not receive provider configuration or send the full character record.
+Generated candidates and applied portraits are stored separately from bundled
+portrait packs under
+`<data-directory>/generated_portraits/<draft-id>/`. Applied image references
+and available workflow/model provenance are restored with the draft. The
+service records source/usage terms as `not supplied` when the configured
+workflow or model does not provide them; it does not infer a license.
+
 The skill step follows each game's different rules. D&D 3.5 offers the seeded
 skill catalog and allocates level-one skill points using class skills,
 Intelligence, and the human bonus. Class skills cost one point per rank;

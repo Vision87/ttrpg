@@ -162,6 +162,15 @@ def test_theme_surfaces_and_board_frame_adapt_without_changing_play_surface() ->
     assert "Camera.main.backgroundColor = background" in projection
 
 
+def test_webgl_build_configures_a_mobile_device_viewport() -> None:
+    build = (ROOT / "Assets/Editor/WebGLBuild.cs").read_text()
+
+    assert 'if (!html.Contains("name=\\"viewport\\""))' in build
+    assert 'content=\\"width=device-width, initial-scale=1.0, user-scalable=no\\"' in build
+    assert 'html.Replace(\n                headMarker,' in build
+    assert "window.innerWidth" in build
+
+
 def test_feat_detail_pane_separates_inspection_from_selection() -> None:
     creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
     browsing = creator[
@@ -382,6 +391,150 @@ def test_portrait_picker_client_and_dto_contracts() -> None:
     assert "public class PortraitOptionDto" in session_dtos
     assert "public string asset_reference;" in session_dtos
     assert "public string license_url;" in session_dtos
+
+
+def test_generated_portrait_preview_disclosure_and_apply_contracts() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    session_dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    field_ui = creator[
+        creator.index("private void DrawPortraitField"):
+        creator.index("private string CurrentPortraitReference")
+    ]
+    generation_overlay = creator[
+        creator.index("private void DrawPortraitGenerationOverlay"):
+        creator.index("private void DrawPortraitGenerationComposer")
+    ]
+    composer = creator[
+        creator.index("private void DrawPortraitGenerationComposer"):
+        creator.index("private void DrawGeneratedPortraitProvenance")
+    ]
+    generate = creator[
+        creator.index("private IEnumerator GeneratePortrait"):
+        creator.index("private IEnumerator UsePortraitCandidate")
+    ]
+    use_candidate = creator[
+        creator.index("private IEnumerator UsePortraitCandidate"):
+        creator.index("private IEnumerator DiscardPortraitCandidate")
+    ]
+    preview = creator[
+        creator.index("private void DrawPortraitCandidate"):
+        creator.index("private string CurrentPortraitReference")
+    ]
+
+    assert "Generate portrait" in field_ui
+    assert "portraitGenerationState = PortraitGenerationState.Composer;" in field_ui
+    assert "StartCoroutine(GeneratePortrait(field.id));" not in field_ui
+    assert "StartCoroutine(GeneratePortrait(portraitFieldId));" in generation_overlay
+    assert 'CreationUiStyles.TertiaryButton("Close")' in generation_overlay
+    assert "configuration.comfyui_destination" in composer
+    assert "configuration.ollama_enabled" in composer
+    assert "Ability scores and skill ranks are excluded." in composer
+    assert 'GUILayout.TextArea(' in composer
+    assert field_ui.index("Choose portrait") < field_ui.index("Generate portrait")
+    assert generate.index("yield return SaveCurrentStepFields") < generate.index(
+        '"/portrait-candidates"'
+    )
+    assert "description = portraitGenerationDescription" in generate
+    assert "Portrait preview" in preview
+    assert '"Use"' in preview
+    assert '"Discard"' in preview
+    assert "textValues[" not in preview
+    assert '"/apply"' in use_candidate
+    assert "ApplyDraft(updated, true);" in use_candidate
+    assert "textValues[fieldId] = fieldValue.text_value ?? \"\";" in use_candidate
+    assert "LoadGeneratedPortraitImage" in creator
+    assert "ImageConversion.LoadImage" in creator
+    assert "public PortraitGenerationDto portrait_generation;" in session_dtos
+    assert "public class GeneratedPortraitProvenanceDto" in session_dtos
+
+
+def test_generated_portrait_library_has_separate_searchable_picker_section() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    session_dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    filtering = creator[
+        creator.index("private List<PortraitGalleryEntry> GetFilteredPortraitEntries"):
+        creator.index("private static bool MatchesPortraitSearch")
+    ]
+    tile = creator[
+        creator.index("private void DrawPortraitTile"):
+        creator.index("private static string WrapPortraitPath")
+    ]
+
+    assert "public GeneratedPortraitDto[] generated_portraits;" in session_dtos
+    assert "draft?.generated_portraits" in filtering
+    assert "Generated = portrait" in filtering
+    assert "provenance?.description" in filtering
+    assert "provenance?.source" in filtering
+    assert '"Generated portraits"' in creator
+    assert "GeneratedPortraitTooltip(entry.Generated)" in tile
+    assert "GeneratedPortraitImageTarget.Library" in tile
+    assert "portraitSelectionReference = reference;" in tile
+    assert "StartCoroutine(ApplySelectedPortrait());" in tile
+
+
+def test_mobile_candidate_swipes_require_a_loaded_preview_and_deliberate_motion() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    overlay = creator[
+        creator.index("private void DrawPortraitGenerationOverlay"):
+        creator.index("private void DrawPortraitGenerationProgress")
+    ]
+    preview = creator[
+        creator.index("private void DrawPortraitCandidateOverlay"):
+        creator.index("private void HandleCandidatePreviewTouch")
+    ]
+    touch_handler = creator[
+        creator.index("private void HandleCandidatePreviewTouch"):
+        creator.index("private void DrawPortraitGenerationComposer")
+    ]
+
+    assert '"< Swipe left: discard     Swipe right: use >"' in preview
+    assert "currentCandidate != null &&\n            Screen.width >= UiLayout.MdMax" in overlay
+    assert "Screen.width >= UiLayout.MdMax" in touch_handler
+    assert "portraitGenerationState != PortraitGenerationState.CandidatePreview" in touch_handler
+    assert "candidatePortraitTexture == null" in touch_handler
+    assert "requestInProgress" in touch_handler
+    assert "imageRect.Contains(guiPosition)" in touch_handler
+    assert "touch.phase == TouchPhase.Canceled" in touch_handler
+    assert "horizontalDistance < minimumDistance" in touch_handler
+    assert "Mathf.Abs(displacement.y) * 1.25f" in touch_handler
+    assert "StartCoroutine(UsePortraitCandidate(" in touch_handler
+    assert "StartCoroutine(DiscardPortraitCandidate(" in touch_handler
+
+
+def test_generated_portrait_overlay_progress_and_resume_contracts() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    field_ui = creator[
+        creator.index("private void DrawPortraitField"):
+        creator.index("private void DrawPortraitGenerationOverlay")
+    ]
+    overlay = creator[
+        creator.index("private void DrawPortraitGenerationOverlay"):
+        creator.index("private void DrawPortraitGenerationProgress")
+    ]
+    preview = creator[
+        creator.index("private void DrawPortraitCandidateOverlay"):
+        creator.index("private void DrawPortraitGenerationComposer")
+    ]
+    generate = creator[
+        creator.index("private IEnumerator GeneratePortrait"):
+        creator.index("private IEnumerator UsePortraitCandidate")
+    ]
+    on_gui = creator[
+        creator.index("private void OnGUI"):
+        creator.index("private void DrawCreationSurfaces")
+    ]
+
+    assert "Review generated portrait" in field_ui
+    assert "PortraitGenerationState.CandidatePreview" in field_ui
+    assert "DrawPortraitGenerationProgress();" in overlay
+    assert "DrawPortraitCandidateOverlay(candidate);" in overlay
+    assert "ScaleMode.ScaleToFit" in preview
+    assert "savingAppearanceForPortrait" in creator
+    assert "PortraitGenerationState.CandidatePreview" in generate
+    assert "PortraitGenerationState.Composer" in generate
+    assert on_gui.index("DrawPortraitGenerationOverlay();") < on_gui.index(
+        "if (requestInProgress)"
+    )
 
 
 def test_creation_layout_uses_shared_density_and_fixed_chrome() -> None:

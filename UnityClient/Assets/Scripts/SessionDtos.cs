@@ -430,6 +430,60 @@ public class DraftResponseDto
     public ThemeDto theme;
     public EquipmentShopDto equipment_shop;
     public PortraitPackDto[] portrait_packs;
+    public GeneratedPortraitDto[] generated_portraits;
+    public PortraitGenerationDto portrait_generation;
+}
+
+[Serializable]
+public class PortraitGenerationDto
+{
+    public PortraitGenerationConfigurationDto configuration;
+    public GeneratedPortraitDto candidate;
+    public GeneratedPortraitDto applied;
+}
+
+[Serializable]
+public class GeneratePortraitRequestDto
+{
+    public string description;
+}
+
+[Serializable]
+public class PortraitGenerationConfigurationDto
+{
+    public bool comfyui_configured;
+    public string comfyui_destination;
+    public string comfyui_workflow;
+    public string comfyui_model;
+    public string comfyui_terms;
+    public bool ollama_enabled;
+    public string ollama_destination;
+    public string ollama_model;
+    public string ollama_terms;
+}
+
+[Serializable]
+public class GeneratedPortraitDto
+{
+    public string candidate_id;
+    public string portrait_id;
+    public string reference;
+    public string image_url;
+    public string content_type;
+    public GeneratedPortraitProvenanceDto provenance;
+}
+
+[Serializable]
+public class GeneratedPortraitProvenanceDto
+{
+    public string source;
+    public string workflow;
+    public string image_model;
+    public string ollama_model;
+    public string ollama_terms;
+    public string created_at;
+    public string description;
+    public string source_terms;
 }
 
 [Serializable]
