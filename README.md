@@ -22,12 +22,21 @@ The local service is authoritative for character-creation requests and saved dra
 
 ### Runtime
 
-- Python 3.10 or newer for the local service. The service uses the Python standard library; the repository does not currently have a Python dependency manifest.
-- Unity 6000.6.2f1 with WebGL Build Support to build the client. The Unity project declares JSON serialization, UnityWebRequest, and uGUI modules in `UnityClient/Packages/manifest.json`.
+- Python 3.10 or newer for the local service. The service uses the Python standard library and has no third-party Python runtime dependencies.
+- Optional portrait generation requires a separately installed ComfyUI server,
+  an API-export workflow, and a compatible checkpoint. The service calls
+  ComfyUI's HTTP API; it does not bundle ComfyUI, PyTorch, or model weights.
+  The local Intel macOS CPU setup was tested with ComfyUI 0.3.0, PyTorch 2.2.2,
+  and torchvision 0.17.2. Use versions compatible with your operating system
+  and hardware, and follow the checkpoint's license.
+- Optional Ollama provides prompt refinement only; image generation still requires ComfyUI.
+- Unity 6000.6.2f1 with WebGL Build Support to build the client. The Unity
+  project declares ImageConversion, JSON serialization, UnityWebRequest, and
+  uGUI modules in `UnityClient/Packages/manifest.json`.
 
 ### Development and optional tools
 
-- `pytest` is used by the Python test suite. Install it with `python3 -m pip install pytest`.
+- Install the Python test dependency with `python3 -m pip install -r requirements-dev.txt`.
 - `rsvg-convert` is only needed to regenerate the bundled portrait PNGs from their SVG sources with `python3 tools/generate_portraits.py`; it is not needed to run the service or client.
 
 ## Current scope

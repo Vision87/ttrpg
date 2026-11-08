@@ -37,8 +37,14 @@ supported method.
 Portrait generation is disabled until the local Python service is given a
 ComfyUI API-export workflow. Export a workflow from ComfyUI with **File >
 Export (API)**, then replace the positive prompt node's text value with the
-literal `{{CHARACTER_PROMPT}}` placeholder. Start the service with that
-workflow path:
+literal `{{CHARACTER_PROMPT}}` placeholder. The workflow must also expose at
+least one numeric `seed` or `noise_seed` input; the service varies it for each
+request and reports an error if no seed can be changed. Model weights are not
+included in this repository. For the local CPU-only setup, the workflow uses
+`v1-5-pruned-emaonly.safetensors` at 512x512 and 15 sampling steps.
+
+Start the service with your workflow path. The path below matches the local
+ComfyUI setup; replace it if your workflow is stored elsewhere:
 
 ```sh
 python3 tools/serve_webgl.py \
@@ -46,13 +52,16 @@ python3 tools/serve_webgl.py \
   --port 8000 \
   --data-directory ~/.universal-rpg-board/data \
   --comfyui-url http://127.0.0.1:8188 \
-  --comfyui-workflow ~/.config/comfyui/portrait-api.json \
-    --comfyui-model your-checkpoint-name \
-    --comfyui-terms "terms supplied by the checkpoint source"
+  --comfyui-workflow ~/ComfyUI/portrait-api.json \
+  --comfyui-model v1-5-pruned-emaonly.safetensors \
+  --comfyui-terms "terms supplied by the checkpoint source" \
+  --comfyui-timeout 600
 ```
 
 The optional `--comfyui-model` value is a provenance label; when omitted, the
 service records model identifiers found in the workflow or `not supplied`.
+The default `--comfyui-timeout` is 600 seconds to allow slower local CPU
+inference; lower it for faster hardware or raise it for slower workflows.
 Ollama refinement is opt-in with `--ollama-model <model>` and an optional
 `--ollama-url` (default `http://127.0.0.1:11434`). Without Ollama, or if it is
 unavailable, the service sends its deterministic prompt directly to ComfyUI.
@@ -66,11 +75,12 @@ draft's selected race/species, class/career/homeworld/origin, gear, and
 appearance details; ability scores and skill ranks are excluded. The client
 does not receive provider configuration or send the full character record.
 Generated candidates and applied portraits are stored separately from bundled
-portrait packs under
-`<data-directory>/generated_portraits/<draft-id>/`. Applied image references
-and available workflow/model provenance are restored with the draft. The
-service records source/usage terms as `not supplied` when the configured
-workflow or model does not provide them; it does not infer a license.
+portrait packs under `<data-directory>/generated_portraits/`, with draft-scoped
+candidate/applied files and a shared generated-portrait library. Applied image
+references and available workflow/model provenance are restored with the
+draft. The service records source/usage terms as `not supplied` when the
+configured workflow or model does not provide them; it does not infer a
+license.
 
 The skill step follows each game's different rules. D&D 3.5 offers the seeded
 skill catalog and allocates level-one skill points using class skills,
