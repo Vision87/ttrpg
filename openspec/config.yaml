@@ -7,33 +7,28 @@ context: |
   Preserve ruleset-package and asset provenance, version, and license metadata when changing bundled content.
   The root MIT license applies only to original application code. See THIRD_PARTY_NOTICES.md for separate or unresolved terms.
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+rules:
+  proposal:
+    - "Keep proposals under 400 words."
+    - "Structure strictly into: Why, What Changes, Capabilities, and Impact."
+    - "Omit speculative future roadmaps or unrequested features."
+  specs:
+    - Group requirements into max 3-5 core items per capability.
+    - Write concise declarative scenarios; avoid combinatorial test cases.
+  design:
+    - Keep design docs under 600 words.
+    - Focus strictly on architecture, state boundaries, and data contracts.
+    - Use plain ASCII diagrams; do not duplicate raw spec requirements or code blocks.
+  tasks:
+    - Limit change plans to 5-8 atomic tasks.
+    - Every task MUST include a single-line verification command.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - Work strictly on one task at a time; do not implement future tasks prematurely.
+      - Pipe build and test output to keep logs under 15 lines.
+      - Do not re-read files unless modified or directly needed for the active task.
+  archive:
+    guidance:
+      - Summarize the final archive outcome in under 100 words.
