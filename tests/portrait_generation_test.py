@@ -237,12 +237,14 @@ def test_visual_prompt_includes_appearance_and_gear_but_excludes_mechanics(
     workflow.equipment_state["items"] = [
         {"item_id": item_id, "slot": "main hand"}
     ]
+    workflow.presentation.gender_presentation = "female"
     workflow.presentation.material_tints["hair"] = "silver"
 
     prompt = build_visual_prompt(workflow, "A weathered traveler in blue")
     assert package["definitions"][race_id]["name"] in prompt
     assert package["definitions"][class_id]["name"] in prompt
     assert package["definitions"][item_id]["name"] in prompt
+    assert "Visual gender presentation: female" in prompt
     assert "silver" in prompt
     assert "A weathered traveler in blue" in prompt
     assert "Private Name" not in prompt
@@ -267,6 +269,7 @@ def test_visual_prompt_requires_a_visible_face_without_a_user_description(
 
     prompt = build_visual_prompt(workflow, "")
 
+    assert "gender presentation" not in prompt
     assert "close-up head-and-shoulders portrait" in prompt
     assert "not a full-body or distant scene" in prompt
     assert "Both eyes, the nose, and the mouth" in prompt

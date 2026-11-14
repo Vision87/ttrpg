@@ -22,7 +22,10 @@ from character.store import (
     PackageVersionUnavailableError,
 )
 from character.templates import CharacterTemplate
-from character.workflow import CreationWorkflow
+from character.workflow import (
+    GENDER_PRESENTATION_STEP_ID,
+    CreationWorkflow,
+)
 from clients.portrait_generation import (
     GeneratedPortraitStorage,
     PortraitGenerationError,
@@ -36,11 +39,27 @@ from rules.package_resolver import (
 )
 from rules.schema import (
     DefinitionValidationError,
+    validate_creation_flow,
     validate_creation_flow_references,
     validate_ruleset_package,
 )
 from rules.theme import resolve_theme_profile
 from session.runtime import Controller, Session
+
+
+_SYSTEM_PRESENTATION_STEP = {
+    "id": GENDER_PRESENTATION_STEP_ID,
+    "label": "Gender presentation",
+    "fields": [
+        {
+            "id": "gender_presentation",
+            "label": "Gender presentation",
+            "type": "presentation",
+            "slot": "gender_presentation",
+            "required": False,
+        }
+    ],
+}
 
 
 class CharacterCreationApplication:
@@ -519,13 +538,46 @@ class CharacterCreationApplication:
         resolved_manifest, versions, definitions = self._resolve_ruleset(package_id)
         return self._flow_payload(resolved_manifest, versions, definitions)
 
+    def _resolved_creation_flow(
+        self,
+        manifest: dict[str, Any],
+        definitions: dict[str, dict[str, Any]],
+        *,
+        require_gender_presentation: bool = True,
+    ) -> dict[str, Any]:
+        flow = deepcopy(manifest["creation_flow"])
+        system_step = deepcopy(_SYSTEM_PRESENTATION_STEP)
+        system_step["fields"][0]["required"] = require_gender_presentation
+        validate_creation_flow({"steps": [system_step]}, definitions)
+        if any(step["id"] == system_step["id"] for step in flow["steps"]):
+            raise DefinitionValidationError(
+                f"Package creation flow uses reserved step id: {system_step['id']}"
+            )
+        system_field_ids = {field["id"] for field in system_step["fields"]}
+        if any(
+            field["id"] in system_field_ids
+            for step in flow["steps"]
+            for field in step["fields"]
+        ):
+            raise DefinitionValidationError(
+                "Package creation flow uses a reserved system field id"
+            )
+        flow["steps"].insert(0, system_step)
+        return flow
+
     def _flow_payload(
         self,
         manifest: dict[str, Any],
         versions: dict[str, str],
         definitions: dict[str, dict[str, Any]],
+        *,
+        require_gender_presentation: bool = True,
     ) -> dict[str, Any]:
-        flow = deepcopy(manifest["creation_flow"])
+        flow = self._resolved_creation_flow(
+            manifest,
+            definitions,
+            require_gender_presentation=require_gender_presentation,
+        )
         feat_descriptions = manifest.get("feat_descriptions", {})
         for step in flow["steps"]:
             for field_data in step["fields"]:
@@ -586,6 +638,7 @@ class CharacterCreationApplication:
         if policy not in {"guided", "strict", "homebrew"}:
             raise ValueError("policy must be guided, strict, or homebrew")
         manifest, versions, definitions = self._resolve_ruleset(package_id)
+        creation_flow = self._resolved_creation_flow(manifest, definitions)
         draft_id = uuid.uuid4().hex
         template_id = body.get("template_id") or None
         if template_id is None:
@@ -595,7 +648,7 @@ class CharacterCreationApplication:
                 package_id,
                 definitions,
                 policy,
-                creation_flow=manifest["creation_flow"],
+                creation_flow=creation_flow,
                 package_versions=versions,
                 equipment_shop=manifest.get("equipment_shop"),
             )
@@ -622,7 +675,7 @@ class CharacterCreationApplication:
             package_id,
             template,
             definitions,
-            manifest["creation_flow"],
+            creation_flow,
             policy,
             equipment_shop=manifest.get("equipment_shop"),
         )
@@ -645,7 +698,14 @@ class CharacterCreationApplication:
         return CreationWorkflow.from_draft_record(
             record,
             ruleset_definitions=definitions,
-            creation_flow=manifest["creation_flow"],
+            creation_flow=self._resolved_creation_flow(
+                manifest,
+                definitions,
+                require_gender_presentation=record.get(
+                    "requires_gender_presentation",
+                    "current_step_id" in record,
+                ),
+            ),
             package_versions=versions,
             equipment_shop=manifest.get("equipment_shop"),
         )
@@ -735,11 +795,16 @@ class CharacterCreationApplication:
         manifest, versions, definitions = self._resolve_ruleset(
             workflow.ruleset_id
         )
-        flow_payload = self._flow_payload(manifest, versions, definitions)
+        flow_payload = self._flow_payload(
+            manifest,
+            versions,
+            definitions,
+            require_gender_presentation=workflow.requires_gender_presentation,
+        )
         field_values: list[dict[str, Any]] = []
         character = workflow.builder.character
         presentation = workflow.presentation.to_record()
-        for step in manifest["creation_flow"]["steps"]:
+        for step in flow_payload["creation_flow"]["steps"]:
             for field_data in step["fields"]:
                 value: dict[str, Any] = {"field_id": field_data["id"]}
                 if field_data["type"] == "number":
@@ -840,6 +905,7 @@ class CharacterCreationApplication:
             "draft": record,
             "model_recipe": record.get("model_recipe"),
             "current_step": workflow.current_step,
+            "requires_gender_presentation": workflow.requires_gender_presentation,
             "field_values": field_values,
             "review": workflow.review(),
             "portrait_packs": self._portrait_packs_payload(workflow.ruleset_id),

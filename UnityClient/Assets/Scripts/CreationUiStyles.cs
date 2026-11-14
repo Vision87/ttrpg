@@ -10,6 +10,7 @@ public static class CreationUiStyles
     private static GUIStyle tertiary;
     private static GUIStyle icon;
     private static GUIStyle selection;
+    private static GUIStyle presentationChoice;
     private static GUIStyle input;
     private static GUIStyle title;
     private static GUIStyle section;
@@ -46,6 +47,7 @@ public static class CreationUiStyles
     public static GUIStyle Tertiary { get { Ensure(); return tertiary; } }
     public static GUIStyle Icon { get { Ensure(); return icon; } }
     public static GUIStyle Selection { get { Ensure(); return selection; } }
+    public static GUIStyle PresentationChoice { get { Ensure(); return presentationChoice; } }
     public static GUIStyle Input { get { Ensure(); return input; } }
     public static GUIStyle Title { get { Ensure(); return title; } }
     public static GUIStyle Section { get { Ensure(); return section; } }
@@ -156,6 +158,19 @@ public static class CreationUiStyles
         selection.alignment = TextAnchor.MiddleLeft;
         SetBackgrounds(selection, panelTexture, buttonHoverTexture, selectedTexture);
         selection.wordWrap = true;
+        presentationChoice = CloneButton(
+            baseButton,
+            density.PrimaryFont,
+            FontStyle.Bold,
+            10,
+            12);
+        presentationChoice.alignment = TextAnchor.MiddleCenter;
+        presentationChoice.wordWrap = true;
+        SetBackgrounds(
+            presentationChoice,
+            normalButton,
+            hoverButton,
+            activeButton);
         input = new GUIStyle(GUI.skin != null ? GUI.skin.textField : new GUIStyle())
         {
             fontSize = density.BodyFont,
@@ -574,6 +589,13 @@ public static class CreationUiStyles
             content,
             Icon,
             Prefixed(options, GUILayout.Width(size), GUILayout.Height(size)));
+    }
+
+    public static bool PresentationButton(
+        GUIContent content,
+        params GUILayoutOption[] options)
+    {
+        return GUILayout.Button(content, PresentationChoice, options);
     }
 
     public static void DrawBackdrop(Rect rect, Texture2D themeBackground)

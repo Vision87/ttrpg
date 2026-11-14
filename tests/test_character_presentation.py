@@ -19,6 +19,7 @@ def test_model_recipe_serialization() -> None:
     recipe = ModelRecipe(
         race_profile="dwarf",
         race_choice_id="race.dwarf",
+        gender_presentation="female",
         bone_scales=get_race_bone_scales("dwarf"),
         slices={"torso": "armor_chainmail_torso", "legs": "armor_chainmail_legs"},
         sockets={"main_hand": "wpn_greataxe", "off_hand": "shield_round"},
@@ -33,6 +34,7 @@ def test_model_recipe_serialization() -> None:
     restored = ModelRecipe.from_record(data)
     assert restored.race_profile == "dwarf"
     assert restored.race_choice_id == "race.dwarf"
+    assert restored.gender_presentation == "female"
     assert restored.bone_scales == recipe.bone_scales
     assert restored.slices == recipe.slices
     assert restored.sockets == recipe.sockets
@@ -59,6 +61,42 @@ def test_race_bone_scaling_profiles() -> None:
 
     half_orc_scales = get_race_bone_scales("Half-Orc")
     assert half_orc_scales["shoulders"][0] > 1.1  # Broad shoulders
+
+
+def test_gender_presentation_composes_with_race_scales_without_changing_height() -> None:
+    race_id = "race.dwarf"
+    baseline = generate_model_recipe(
+        {
+            "choices": {"race": [race_id]},
+            "equipment_state": {"items": []},
+            "presentation": {},
+        }
+    )
+    male = generate_model_recipe(
+        {
+            "choices": {"race": [race_id]},
+            "equipment_state": {"items": []},
+            "presentation": {"gender_presentation": "male"},
+        }
+    )
+    female = generate_model_recipe(
+        {
+            "choices": {"race": [race_id]},
+            "equipment_state": {"items": []},
+            "presentation": {"gender_presentation": "female"},
+        }
+    )
+
+    assert baseline.gender_presentation is None
+    assert baseline.bone_scales == get_race_bone_scales("dwarf")
+    assert male.gender_presentation == "male"
+    assert female.gender_presentation == "female"
+    assert male.bone_scales["shoulders"][0] == 1.25 * 1.08
+    assert male.bone_scales["spine"][0] == 1.25 * 1.04
+    assert female.bone_scales["shoulders"][0] == 1.25 * 0.96
+    assert female.bone_scales["hips"][0] == 1.06
+    assert male.bone_scales["spine"][1] == baseline.bone_scales["spine"][1]
+    assert female.bone_scales["spine"][1] == baseline.bone_scales["spine"][1]
 
 
 def test_item_visual_mapping_rules() -> None:

@@ -1498,7 +1498,13 @@ public sealed class CharacterCreationClient : MonoBehaviour
     private void DrawField(CreationFieldDto field)
     {
         GUILayout.Space(6);
-        GUILayout.Label(field.label + (field.required ? " *" : ""), CreationUiStyles.FieldLabel);
+        bool fieldRequired = IsFieldRequired(field);
+        GUILayout.Label(field.label + (fieldRequired ? " *" : ""), CreationUiStyles.FieldLabel);
+        if (field.type == "presentation" && field.slot == "gender_presentation")
+        {
+            DrawGenderPresentationField(field);
+            return;
+        }
         if (field.type == "presentation" && field.slot == "portrait")
         {
             DrawPortraitField(field);
@@ -1626,6 +1632,93 @@ public sealed class CharacterCreationClient : MonoBehaviour
         else
         {
             GUILayout.Label("Unsupported field: " + field.type);
+        }
+    }
+
+    private bool IsFieldRequired(CreationFieldDto field)
+    {
+        if (!field.required)
+        {
+            return false;
+        }
+        return field.type != "presentation" ||
+            field.slot != "gender_presentation" ||
+            draft == null ||
+            draft.requires_gender_presentation;
+    }
+
+    private void DrawGenderPresentationField(CreationFieldDto field)
+    {
+        string selected = textValues.ContainsKey(field.id)
+            ? textValues[field.id]
+            : "";
+        float buttonSize = Mathf.Clamp(Screen.width * 0.32f, 104f, 180f);
+        bool previousEnabled = GUI.enabled;
+        GUI.enabled = previousEnabled && !requestInProgress;
+        GUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (DrawGenderPresentationOption(
+            "♂",
+            "Male",
+            selected == "male",
+            buttonSize))
+        {
+            StartCoroutine(SetGenderPresentation(field.id, "male"));
+        }
+        GUILayout.Space(UiLayout.CurrentDensity.Spacing);
+        if (DrawGenderPresentationOption(
+            "♀",
+            "Female",
+            selected == "female",
+            buttonSize))
+        {
+            StartCoroutine(SetGenderPresentation(field.id, "female"));
+        }
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+        GUI.enabled = previousEnabled;
+        GUILayout.Label(
+            "Choose a visual presentation. This does not change game rules.",
+            CreationUiStyles.Caption);
+    }
+
+    private bool DrawGenderPresentationOption(
+        string symbol,
+        string label,
+        bool selected,
+        float buttonSize)
+    {
+        Color previousColor = GUI.backgroundColor;
+        GUI.backgroundColor = selected ? CreationUiStyles.AccentColor : Color.white;
+        bool clicked = CreationUiStyles.PresentationButton(
+            new GUIContent(symbol + "\n" + label, label + " visual presentation"),
+            GUILayout.Width(buttonSize),
+            GUILayout.Height(buttonSize));
+        GUI.backgroundColor = previousColor;
+        return clicked;
+    }
+
+    private IEnumerator SetGenderPresentation(string fieldId, string value)
+    {
+        errorMessage = "";
+        textValues[fieldId] = value;
+        yield return UpdateField(JsonUtility.ToJson(
+            new StringFieldRequestDto
+            {
+                field_id = fieldId,
+                value = value
+            }));
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            if (serverFieldValues.TryGetValue(fieldId, out var savedValue) &&
+                !string.IsNullOrEmpty(savedValue.text_value))
+            {
+                textValues[fieldId] = savedValue.text_value;
+            }
+            else
+            {
+                textValues.Remove(fieldId);
+            }
         }
     }
 
@@ -2879,6 +2972,17 @@ public sealed class CharacterCreationClient : MonoBehaviour
             "homeworld/origin, gear, and appearance choices are sent to the configured " +
             "services. Ability scores and skill ranks are excluded.",
             CreationUiStyles.Caption);
+        string genderPresentation = draft != null &&
+            draft.draft != null &&
+            draft.draft.presentation != null
+                ? draft.draft.presentation.gender_presentation
+                : null;
+        if (!string.IsNullOrEmpty(genderPresentation))
+        {
+            GUILayout.Label(
+                "Visual gender presentation sent: " + genderPresentation + ".",
+                CreationUiStyles.Caption);
+        }
     }
 
     private void DrawGeneratedPortraitProvenance(
@@ -4007,6 +4111,24 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     };
                     yield return UpdateField(JsonUtility.ToJson(request));
                 }
+            }
+            else if (field.type == "presentation" &&
+                field.slot == "gender_presentation")
+            {
+                string value = textValues.ContainsKey(field.id)
+                    ? textValues[field.id]
+                    : "";
+                if (string.IsNullOrEmpty(value) && IsFieldRequired(field))
+                {
+                    errorMessage = field.label + " is required.";
+                    yield break;
+                }
+                var request = new StringFieldRequestDto
+                {
+                    field_id = field.id,
+                    value = string.IsNullOrEmpty(value) ? null : value
+                };
+                yield return UpdateField(JsonUtility.ToJson(request));
             }
             else if (field.type == "presentation" && field.slot == "portrait")
             {

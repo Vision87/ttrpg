@@ -67,6 +67,7 @@ public class ModelRecipeDto
 {
     public string race_profile;
     public string race_choice_id;
+    public string gender_presentation;
     public BoneScaleDto[] bone_scales_list;
     public NamedStringDto[] slices_list;
     public NamedStringDto[] sockets_list;
@@ -146,6 +147,7 @@ public class CharacterPresentationDto
     public string model;
     public float scale;
     public string animation_style;
+    public string gender_presentation;
     public ModelRecipeDto model_recipe;
 }
 
@@ -419,6 +421,7 @@ public class DraftRecordDto
     public string name;
     public string ruleset_id;
     public int current_step_index;
+    public string current_step_id;
     public string template_id;
     public AbilityRollEventDto[] ability_roll_events;
     public EquipmentStateDto equipment_state;
@@ -527,6 +530,7 @@ public class DraftResponseDto
     public DraftRecordDto draft;
     public ModelRecipeDto model_recipe;
     public string current_step;
+    public bool requires_gender_presentation;
     public DraftFieldValueDto[] field_values;
     public ReviewDto review;
     public ThemeDto theme;

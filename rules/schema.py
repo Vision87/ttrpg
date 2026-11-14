@@ -768,6 +768,7 @@ def validate_creation_flow(
                     "model",
                     "scale",
                     "animation_style",
+                    "gender_presentation",
                 }:
                     raise DefinitionValidationError(
                         f"{field_path}.slot is unsupported: {slot}"

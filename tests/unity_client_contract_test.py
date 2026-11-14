@@ -206,6 +206,35 @@ def test_unity_client_renders_package_flows_and_ruleset_themes_generically() -> 
     assert "ApplyTheme(envelope.theme)" in projections
 
 
+def test_gender_presentation_uses_accessible_square_choices_and_required_gate() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    styles = (ROOT / "Assets/Scripts/CreationUiStyles.cs").read_text()
+    dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    workflow = (ROOT.parent / "character" / "workflow.py").read_text()
+    field_ui = creator[
+        creator.index("private void DrawField(CreationFieldDto field)"):
+        creator.index("private void DrawTrainedSkills")
+    ]
+    save_fields = creator[
+        creator.index("private IEnumerator SaveCurrentStepFields"):
+        creator.index("private IEnumerator SaveStepAndExit")
+    ]
+
+    assert 'field.slot == "gender_presentation"' in field_ui
+    assert '"♂",' in field_ui
+    assert '"Male",' in field_ui
+    assert '"♀",' in field_ui
+    assert '"Female",' in field_ui
+    assert 'label + " visual presentation"' in field_ui
+    assert "GUILayout.Width(buttonSize)" in field_ui
+    assert "GUILayout.Height(buttonSize)" in field_ui
+    assert "draft.requires_gender_presentation" in field_ui
+    assert 'field.slot == "gender_presentation"' in save_fields
+    assert "Select male or female visual presentation before continuing" in workflow
+    assert "PresentationChoice" in styles
+    assert "public bool requires_gender_presentation;" in dtos
+
+
 def test_ability_score_roll_uses_local_dice_icon() -> None:
     creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
     icons = (ROOT / "Assets/Scripts/CreationIcons.cs").read_text()
@@ -521,6 +550,8 @@ def test_generated_portrait_preview_disclosure_and_apply_contracts() -> None:
     assert "configuration.comfyui_destination" in composer
     assert "configuration.ollama_enabled" in composer
     assert "Ability scores and skill ranks are excluded." in composer
+    assert "Visual gender presentation sent:" in composer
+    assert "draft.draft.presentation.gender_presentation" in composer
     assert 'GUILayout.TextArea(' in composer
     assert field_ui.index("Choose portrait") < field_ui.index("Generate portrait")
     assert generate.index("yield return SaveCurrentStepFields") < generate.index(
@@ -750,6 +781,7 @@ def test_model_recipe_dto_contract() -> None:
     assert "public class NamedStringDto" in session_dtos
     assert "public ModelRecipeDto model_recipe;" in session_dtos
     assert "public string race_profile;" in session_dtos
+    assert "public string gender_presentation;" in session_dtos
     assert "public BoneScaleDto[] bone_scales_list;" in session_dtos
     assert "public NamedStringDto[] slices_list;" in session_dtos
     assert "public NamedStringDto[] sockets_list;" in session_dtos
@@ -775,5 +807,7 @@ def test_character_turntable_preview_contract() -> None:
     assert "public class ModularCharacterAssembler : MonoBehaviour" in assembler
     assert "ApplyRecipe(ModelRecipeDto recipe)" in assembler
     assert "ApplyBoneScales" in assembler
+    assert 'recipe.GetBoneScale("hips", defaultScale)' in assembler
+    assert "hipsBone.localScale = hipsScale;" in assembler
     assert "ApplySlice" in assembler
     assert "ApplyProp" in assembler

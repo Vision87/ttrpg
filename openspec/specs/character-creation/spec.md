@@ -88,6 +88,21 @@ The system SHALL allow a character creator to configure identity, portrait, 2D t
 - **WHEN** a user resumes a draft with a selected portrait
 - **THEN** the system SHALL restore the same versioned portrait reference and SHALL NOT alter mechanical choices.
 
+### Requirement: Male/female visual presentation step
+The system SHALL provide a system-owned visual gender-presentation step as the first step for every supported character-creation flow, before the active ruleset package's declared steps. New drafts SHALL require one of two values, `male` or `female`, as visual presentation data separate from mechanical character choices. The client SHALL show two large, square buttons with the corresponding symbols and accessible text labels. The service SHALL persist and validate the selection with the draft.
+
+#### Scenario: New draft requires a visual presentation choice
+- **WHEN** a user starts a new character draft
+- **THEN** the first step shows the male and female symbol buttons before the package-defined steps, and the user cannot continue until selecting one.
+
+#### Scenario: Selection affects presentation but not mechanics
+- **WHEN** a user selects or changes the visual gender presentation
+- **THEN** the draft stores the selection as presentation data and updates the avatar preview without changing mechanical choices or derived statistics.
+
+#### Scenario: Rejecting an unsupported presentation value
+- **WHEN** a client submits a visual gender-presentation value other than `male` or `female`
+- **THEN** the service rejects the update and does not persist the unsupported value.
+
 ### Requirement: Independent appearance color regions
 The character creator SHALL let users choose colors independently for upper clothing, trousers, clothing accents, and eye irises in addition to the existing skin and hair colors. Changing one region's color SHALL update only that region in the preview. Eye whites and pupils SHALL remain fixed. The service SHALL validate and persist selected colors with the draft and restore them when the draft is resumed.
 
@@ -154,11 +169,11 @@ The character-creation interface SHALL present an interactive 3D paper-doll turn
 - **THEN** the character creation interface preserves all creation controls and falls back gracefully without blocking draft progression or saving.
 
 ### Requirement: User-requested portrait generation
-The system SHALL let a user enter an optional portrait description and explicitly request portrait generation from the appearance configuration. The generation request SHALL combine the description with visual-only details from the active character draft, including race or species, class, selected gear, and appearance choices, and SHALL NOT include unrelated mechanical values such as ability scores or skill ranks. The local Python service SHALL send the resulting prompt to a configured ComfyUI image-generation service and MAY use a configured local Ollama model to refine the prompt. Before submission, the system SHALL identify the configured local services and disclose the character details that will be sent to each. Generation SHALL NOT occur automatically when a draft is opened, changed, or saved. Service configuration SHALL remain outside the Unity WebGL client.
+The system SHALL let a user enter an optional portrait description and explicitly request portrait generation from the appearance configuration. The generation request SHALL combine the description with visual-only details from the active character draft, including race or species, class, selected gear, appearance choices, and the selected male or female visual gender presentation when present, and SHALL NOT include unrelated mechanical values such as ability scores or skill ranks. The local Python service SHALL send the resulting prompt to a configured ComfyUI image-generation service and MAY use a configured local Ollama model to refine the prompt. Before submission, the system SHALL identify the configured local services and disclose the character details that will be sent to each, including the selected visual gender presentation. Generation SHALL NOT occur automatically when a draft is opened, changed, or saved. Service configuration SHALL remain outside the Unity WebGL client.
 
 #### Scenario: Generating a portrait from a character draft
 - **WHEN** a user enters a description and requests portrait generation
-- **THEN** the system optionally refines a prompt from the description and visual-only draft details with Ollama, sends the resulting prompt to ComfyUI, and returns a candidate image
+- **THEN** the system optionally refines a prompt from the description and visual-only draft details, including the selected gender presentation when present, with Ollama, sends the resulting prompt to ComfyUI, and returns a candidate image
 
 #### Scenario: Generating without an additional description
 - **WHEN** a user requests portrait generation without entering a description
@@ -170,7 +185,11 @@ The system SHALL let a user enter an optional portrait description and explicitl
 
 #### Scenario: Reviewing generation data disclosure
 - **WHEN** a user is about to submit a portrait generation request
-- **THEN** the system identifies ComfyUI and whether Ollama prompt refinement is enabled, and describes the character details that will be sent to each service
+- **THEN** the system identifies ComfyUI and whether Ollama prompt refinement is enabled, and describes the character details that will be sent to each service, including the selected visual gender presentation when present
+
+#### Scenario: Omitting an unset presentation from the prompt
+- **WHEN** a user requests portrait generation for a draft without a selected visual gender presentation
+- **THEN** the system omits a gender descriptor and continues using the other available visual details
 
 #### Scenario: Previewing a generated portrait
 - **WHEN** portrait generation succeeds
@@ -203,11 +222,11 @@ The system SHALL provide a final validation report before saving a character and
 - **THEN** the system SHALL permit saving only after displaying the warning and SHALL retain that warning in the character record.
 
 ### Requirement: Interactive package-driven character creation
-The system SHALL provide a browser-based character creation flow backed by the active ruleset package and an authoritative Python service. The flow SHALL support template-based and from-scratch drafts, display package-provided choices and validation feedback, and preserve the existing distinction between mechanical choices and presentation settings. The client SHALL provide navigation across the ordered creation steps declared by the active package, allow direct selection of any step, and save edits on the current step before changing steps. The service SHALL accept only a step declared in the active draft's creation flow and SHALL preserve the draft's choices when its current step changes. Navigation SHALL NOT bypass review or finalization validation.
+The system SHALL provide a browser-based character creation flow backed by the active ruleset package and an authoritative Python service. The resolved flow SHALL begin with a system-owned visual gender-presentation step, followed by the active package's ordered creation steps without changing their order. The system-owned step SHALL be available for every supported ruleset and SHALL preserve the existing distinction between mechanical choices and presentation settings. The flow SHALL support template-based and from-scratch drafts, display package-provided choices and validation feedback, and preserve the package's versions and definitions. The client SHALL provide navigation across the resolved flow, allow direct selection of any step, and save edits on the current step before changing steps. The service SHALL accept only a step declared in the resolved flow for the active draft and SHALL preserve the draft's choices when its current step changes. Navigation SHALL NOT bypass review or finalization validation.
 
 #### Scenario: Starting creation with an installed ruleset
 - **WHEN** a user selects an installed ruleset that provides valid creation-flow metadata
-- **THEN** the client displays that package's ordered creation steps and the service creates a draft using the package's version and definitions
+- **THEN** the client displays the system-owned visual gender-presentation step before that package's ordered creation steps, and the service creates a draft using the package's version and definitions
 
 #### Scenario: Choosing a template or starting from scratch
 - **WHEN** a user starts a draft
@@ -226,11 +245,15 @@ The system SHALL provide a browser-based character creation flow backed by the a
 - **THEN** the service rejects the request and leaves the draft's current step and choices unchanged
 
 ### Requirement: Resumable character drafts
-The system SHALL allow a user to save and resume a local character draft without losing its selected ruleset package versions, choices, provenance, validation-relevant values, or presentation settings.
+The system SHALL allow a user to save and resume a local character draft without losing its selected ruleset package versions, choices, provenance, validation-relevant values, presentation settings, or current position in the resolved creation flow.
 
 #### Scenario: Resuming a saved draft
 - **WHEN** a user reopens a saved draft
-- **THEN** the system restores the draft state and continues the same package-defined creation flow
+- **THEN** the system restores the draft state and continues at the same step in the resolved creation flow
+
+#### Scenario: Resuming a draft created before the visual presentation step
+- **WHEN** a user resumes a draft created before the system-owned visual gender-presentation step was added
+- **THEN** the system preserves the draft's existing package-defined step, leaves its presentation unset without inferring a value, and lets the user choose a presentation later
 
 #### Scenario: Draft references an unavailable package version
 - **WHEN** a user resumes a draft whose recorded package version is unavailable

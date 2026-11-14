@@ -194,6 +194,11 @@ def build_visual_prompt(workflow: CreationWorkflow, description: str) -> str:
                 if isinstance(value, str) and value.strip():
                     details.append(f"{field.get('label', 'Appearance')}: {value.strip()}")
 
+    if workflow.presentation.gender_presentation is not None:
+        details.append(
+            "Visual gender presentation: "
+            + workflow.presentation.gender_presentation
+        )
     for slot, value in workflow.presentation.material_tints.items():
         if isinstance(value, str) and value.strip():
             details.append(f"Appearance color {slot}: {value.strip()}")

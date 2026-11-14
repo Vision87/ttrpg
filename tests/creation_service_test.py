@@ -110,10 +110,31 @@ def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
         assert packages["dark-heresy-core"]["theme"]["assets"] == [
             {"slot": "display_font", "asset": "theme.medievalsharp@1"}
         ]
+        for ruleset_id in packages:
+            status, ruleset_flow = app.handle(
+                "GET",
+                f"/api/rulesets/{ruleset_id}/flow",
+            )
+            assert status == 200
+            package_flow = app._resolve_ruleset(ruleset_id)[0]["creation_flow"]
+            steps = ruleset_flow["creation_flow"]["steps"]
+            assert [step["id"] for step in steps] == [
+                "gender-presentation",
+                *[step["id"] for step in package_flow["steps"]],
+            ]
+            assert steps[0]["fields"] == [
+                {
+                    "id": "gender_presentation",
+                    "label": "Gender presentation",
+                    "type": "presentation",
+                    "slot": "gender_presentation",
+                    "required": True,
+                }
+            ]
         status, flow = app.handle("GET", "/api/rulesets/dnd35-core/flow")
         assert status == 200
-        assert flow["creation_flow"]["steps"][0]["id"] == "abilities"
-        race_field = flow["creation_flow"]["steps"][1]["fields"][0]
+        assert flow["creation_flow"]["steps"][1]["id"] == "abilities"
+        race_field = flow["creation_flow"]["steps"][2]["fields"][0]
         race_options = {
             choice["id"]: choice for choice in race_field["options"]
         }
@@ -142,7 +163,7 @@ def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
             "Aquatic Elf",
             "Drow",
         }
-        class_field = flow["creation_flow"]["steps"][2]["fields"][0]
+        class_field = flow["creation_flow"]["steps"][3]["fields"][0]
         assert {
             option["id"]: option["label"]
             for option in class_field["options"]
@@ -174,12 +195,12 @@ def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
             "class.wizard.necromancer": "Necromancer",
             "class.wizard.transmuter": "Transmuter",
         }
-        skills_field = flow["creation_flow"]["steps"][3]["fields"][0]
+        skills_field = flow["creation_flow"]["steps"][4]["fields"][0]
         assert skills_field["skill_selection"] == "ranks"
         assert len(skills_field["options"]) >= 35
         assert all(option["label"] and option["detail"] for option in skills_field["options"])
         assert "skill.appraise" in {option["id"] for option in skills_field["options"]}
-        feats_field = flow["creation_flow"]["steps"][4]["fields"][0]
+        feats_field = flow["creation_flow"]["steps"][5]["fields"][0]
         feat_options = {option["id"]: option for option in feats_field["options"]}
         assert len(feat_options) >= 100
         assert feat_options["feat.power-attack"]["label"] == "Power Attack"
@@ -210,6 +231,13 @@ def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
         assert draft["template_id"] == "template.defensive-fighter"
         draft_id = draft["id"]
 
+        status, presentation = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
+
         status, selected_race = app.handle(
             "PUT",
             f"/api/drafts/{draft_id}",
@@ -229,7 +257,7 @@ def test_creation_service_lists_flows_and_runs_template_to_board() -> None:
 
         status, resumed = app.handle("GET", f"/api/drafts/{draft_id}")
         assert status == 200
-        assert resumed["current_step"] == "abilities"
+        assert resumed["current_step"] == "gender-presentation"
         assert resumed["review"]["can_finalize"] is False
 
         status, updated = app.handle(
@@ -290,6 +318,42 @@ def test_draft_step_selection_validates_and_persists_package_steps() -> None:
         )
         assert status == 201
         draft_id = created["draft"]["id"]
+        assert created["current_step"] == "gender-presentation"
+        assert created["draft"]["current_step_id"] == "gender-presentation"
+        assert created["requires_gender_presentation"] is True
+
+        status, blocked = app.handle(
+            "POST",
+            f"/api/drafts/{draft_id}/step",
+            {"step_id": "abilities"},
+        )
+        assert status == 400
+        assert "before continuing" in blocked["error"]["message"]
+
+        status, invalid_presentation = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "unspecified"},
+        )
+        assert status == 400
+        assert invalid_presentation["error"]["code"] == "invalid-request"
+
+        status, selected_presentation = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "female"},
+        )
+        assert status == 200
+        assert (
+            selected_presentation["draft"]["presentation"]["gender_presentation"]
+            == "female"
+        )
+        assert selected_presentation["model_recipe"]["gender_presentation"] == "female"
+        assert next(
+            value
+            for value in selected_presentation["field_values"]
+            if value["field_id"] == "gender_presentation"
+        )["text_value"] == "female"
 
         status, selected = app.handle(
             "PUT",
@@ -305,6 +369,7 @@ def test_draft_step_selection_validates_and_persists_package_steps() -> None:
         )
         assert status == 200
         assert navigated["current_step"] == "feats"
+        assert navigated["draft"]["current_step_id"] == "feats"
         assert navigated["draft"]["choices"]["race"] == ["race.human"]
 
         status, invalid = app.handle(
@@ -318,7 +383,9 @@ def test_draft_step_selection_validates_and_persists_package_steps() -> None:
         status, resumed = app.handle("GET", f"/api/drafts/{draft_id}")
         assert status == 200
         assert resumed["current_step"] == "feats"
+        assert resumed["draft"]["current_step_id"] == "feats"
         assert resumed["draft"]["choices"]["race"] == ["race.human"]
+        assert resumed["draft"]["presentation"]["gender_presentation"] == "female"
 
 
 def test_creation_service_uses_generic_flows_and_validation_for_dark_heresy() -> None:
@@ -351,9 +418,15 @@ def test_creation_service_uses_generic_flows_and_validation_for_dark_heresy() ->
         )
         assert status == 201
         draft_id = response["draft"]["id"]
-        assert response["current_step"] == "characteristics"
-        assert response["review"]["can_finalize"] is True
-        draft_id = response["draft"]["id"]
+        assert response["current_step"] == "gender-presentation"
+        assert response["review"]["can_finalize"] is False
+        status, selected = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
+        assert selected["review"]["can_finalize"] is True
         status, error = app.handle(
             "POST",
             f"/api/drafts/{draft_id}/roll",
@@ -429,6 +502,12 @@ def test_creation_service_uses_skill_ranks_for_dnd_and_training_for_dark_heresy(
         )
         assert status == 201
         draft_id = created["draft"]["id"]
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
         for field_id, value in (
             ("strength", 10),
             ("dexterity", 10),
@@ -624,6 +703,12 @@ def test_creation_service_rolls_and_rerolls_individual_ability_scores() -> None:
         )
         assert status == 201
         draft_id = created["draft"]["id"]
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
 
         with patch("character.workflow.secrets.SystemRandom") as random_source:
             random_source.return_value.randint.side_effect = [6, 5, 2, 1]
@@ -652,7 +737,6 @@ def test_creation_service_rolls_and_rerolls_individual_ability_scores() -> None:
                 {"field_id": "strength"},
             )
         assert status == 200
-        assert rerolled["field_values"][0]["field_id"] == "strength"
         rerolled_strength = next(
             value for value in rerolled["field_values"]
             if value["field_id"] == "strength"
@@ -697,6 +781,12 @@ def test_creation_service_rolls_and_rerolls_ability_score_groups_atomically() ->
         )
         assert status == 201
         draft_id = created["draft"]["id"]
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
 
         with patch("character.workflow.secrets.SystemRandom") as random_source:
             random_source.return_value.randint.side_effect = [6, 5, 2, 1] * 6
@@ -905,6 +995,12 @@ def test_creation_service_group_roll_failure_preserves_existing_scores() -> None
             {"field_id": "skills", "value": skill_ranks},
         )
         assert status == 200
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
         status, finalized = app.handle(
             "POST",
             f"/api/drafts/{draft_id}/finalize",
@@ -1111,6 +1207,12 @@ def test_creation_service_equipment_migration_and_persistence() -> None:
         )
         assert status == 201
         draft_id = created["draft"]["id"]
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "gender_presentation", "value": "male"},
+        )
+        assert status == 200
 
         # Template defensive-fighter has choices.equipment == ["item.longsword"]
         shop_state = created["equipment_shop"]["state"]

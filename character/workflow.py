@@ -18,6 +18,8 @@ RULESET_WORKFLOW_STEPS = {
     "dark-heresy": ["homeworld", "career", "characteristics", "skills", "talents", "equipment", "appearance"],
 }
 
+GENDER_PRESENTATION_STEP_ID = "gender-presentation"
+
 
 class CreationWorkflow:
     """Dynamic character creation sequence adapting to active ruleset."""
@@ -78,6 +80,10 @@ class CreationWorkflow:
                 ]
             }
             self.steps = list(RULESET_WORKFLOW_STEPS[system_key])
+        self.requires_gender_presentation = (
+            bool(self.steps)
+            and self.steps[0] == GENDER_PRESENTATION_STEP_ID
+        )
         self.current_step_index = 0
         self.ability_rolls: dict[str, list[dict[str, Any]]] = {}
         self.ability_roll_events: list[dict[str, Any]] = []
@@ -210,7 +216,12 @@ class CreationWorkflow:
                 "name"
             ] = "user"
         elif field_type == "presentation":
-            if field_data["slot"] == "scale":
+            slot = field_data["slot"]
+            if slot == "gender_presentation":
+                if not isinstance(value, str) or value not in {"male", "female"}:
+                    raise ValueError(f"{field_id} must be 'male' or 'female'")
+                self.presentation.gender_presentation = value
+            elif slot == "scale":
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError(f"{field_id} must be a number")
                 self.configure_appearance(scale=value)
@@ -386,6 +397,8 @@ class CreationWorkflow:
                 setattr(self.presentation, slot, None)
             elif slot == "scale":
                 self.presentation.scale = 1.0
+            elif slot == "gender_presentation":
+                self.presentation.gender_presentation = None
 
     def choose(self, category: str, item_id: str) -> None:
         self.builder.choose(category, item_id)
@@ -552,6 +565,7 @@ class CreationWorkflow:
 
     def advance_step(self) -> str | None:
         if self.current_step_index < len(self.steps):
+            self._ensure_gender_presentation_selected(self.current_step_index + 1)
             self.current_step_index += 1
         return self.current_step
 
@@ -560,8 +574,20 @@ class CreationWorkflow:
             step_index = self.steps.index(step_id)
         except ValueError as error:
             raise ValueError(f"Unknown creation step: {step_id}") from error
+        self._ensure_gender_presentation_selected(step_index)
         self.current_step_index = step_index
         return step_id
+
+    def _ensure_gender_presentation_selected(self, target_step_index: int) -> None:
+        if (
+            self.requires_gender_presentation
+            and self.current_step == GENDER_PRESENTATION_STEP_ID
+            and target_step_index != self.current_step_index
+            and self.presentation.gender_presentation is None
+        ):
+            raise ValueError(
+                "Select male or female visual presentation before continuing"
+            )
 
     def choose_starting_wealth(
         self,
@@ -1009,10 +1035,20 @@ class CreationWorkflow:
                             )
                         )
                 elif field_type == "presentation":
-                    present = getattr(self.presentation, field_data["slot"], None) is not None
+                    present = (
+                        getattr(self.presentation, field_data["slot"], None)
+                        is not None
+                    )
                 else:
                     present = False
-                if field_data.get("required", False) and not present:
+                required = field_data.get("required", False)
+                if (
+                    field_data["type"] == "presentation"
+                    and field_data["slot"] == "gender_presentation"
+                    and not self.requires_gender_presentation
+                ):
+                    required = False
+                if required and not present:
                     issues.append(
                         self._field_issue(
                             field_data,
@@ -1126,6 +1162,8 @@ class CreationWorkflow:
             "package_versions": dict(character.package_versions),
             "policy": self.policy,
             "current_step_index": self.current_step_index,
+            "current_step_id": self.current_step,
+            "requires_gender_presentation": self.requires_gender_presentation,
             "abilities": dict(character.abilities),
             "choices": {key: list(value) for key, value in character.choices.items()},
             "skill_ranks": dict(character.skill_ranks),
@@ -1163,9 +1201,46 @@ class CreationWorkflow:
             package_versions=package_versions,
             equipment_shop=equipment_shop,
         )
-        step_index = record.get("current_step_index")
-        if not isinstance(step_index, int) or not 0 <= step_index <= len(workflow.steps):
-            raise ValueError("Draft has an invalid creation step")
+        has_system_step = (
+            bool(workflow.steps)
+            and workflow.steps[0] == GENDER_PRESENTATION_STEP_ID
+        )
+        if "requires_gender_presentation" in record:
+            requires_gender_presentation = record["requires_gender_presentation"]
+            if not isinstance(requires_gender_presentation, bool):
+                raise ValueError("Draft has an invalid presentation requirement")
+        else:
+            requires_gender_presentation = "current_step_id" in record
+        workflow.requires_gender_presentation = (
+            has_system_step and requires_gender_presentation
+        )
+        if "current_step_id" in record:
+            current_step_id = record["current_step_id"]
+            if current_step_id is None:
+                step_index = len(workflow.steps)
+            elif isinstance(current_step_id, str):
+                try:
+                    step_index = workflow.steps.index(current_step_id)
+                except ValueError as error:
+                    raise ValueError(
+                        f"Draft references an unknown creation step: {current_step_id}"
+                    ) from error
+            else:
+                raise ValueError("Draft has an invalid creation step id")
+        else:
+            legacy_step_index = record.get("current_step_index")
+            has_system_step = (
+                bool(workflow.steps)
+                and workflow.steps[0] == GENDER_PRESENTATION_STEP_ID
+            )
+            legacy_step_count = len(workflow.steps) - int(has_system_step)
+            if (
+                isinstance(legacy_step_index, bool)
+                or not isinstance(legacy_step_index, int)
+                or not 0 <= legacy_step_index <= legacy_step_count
+            ):
+                raise ValueError("Draft has an invalid creation step")
+            step_index = legacy_step_index + int(has_system_step)
         character = Character(
             character_id=record["id"],
             name=record["name"],

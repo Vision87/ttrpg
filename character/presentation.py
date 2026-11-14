@@ -260,6 +260,20 @@ def generate_model_recipe(
         equipment_state = getattr(character, "equipment_state", {})
         presentation = getattr(character, "presentation", {})
 
+    if isinstance(presentation, dict):
+        gender_presentation = presentation.get("gender_presentation")
+    else:
+        gender_presentation = getattr(
+            presentation,
+            "gender_presentation",
+            None,
+        )
+    if gender_presentation is not None and (
+        not isinstance(gender_presentation, str)
+        or gender_presentation not in {"male", "female"}
+    ):
+        raise ValueError("gender_presentation must be male or female")
+
     # Extract race
     race_name = "human"
     race_choice_id = "race.human"
@@ -302,6 +316,25 @@ def generate_model_recipe(
             class_name = raw_class.split(":")[-1].split(".")[-1].strip().lower().replace("_", "-")
 
     bone_scales = get_race_bone_scales(race_name)
+    if gender_presentation is not None:
+        proportion_scales = (
+            {
+                "spine": [1.04, 1.0, 1.04],
+                "shoulders": [1.08, 1.0, 1.0],
+            }
+            if gender_presentation == "male"
+            else {
+                "spine": [0.98, 1.0, 0.98],
+                "shoulders": [0.96, 1.0, 1.0],
+                "hips": [1.06, 1.0, 1.06],
+            }
+        )
+        for bone, factors in proportion_scales.items():
+            base_scale = bone_scales.setdefault(bone, [1.0, 1.0, 1.0])
+            bone_scales[bone] = [
+                base_scale[index] * factors[index]
+                for index in range(3)
+            ]
     slices = dict(DEFAULT_BASE_SLICES)
     sockets: dict[str, str] = {}
 
@@ -411,6 +444,7 @@ def generate_model_recipe(
     return ModelRecipe(
         race_profile=race_name,
         race_choice_id=race_choice_id,
+        gender_presentation=gender_presentation,
         bone_scales=bone_scales,
         slices=slices,
         sockets=sockets,
@@ -423,6 +457,7 @@ def generate_model_recipe(
 class ModelRecipe:
     race_profile: str = "human"
     race_choice_id: str = ""
+    gender_presentation: str | None = None
     bone_scales: dict[str, list[float]] = field(default_factory=dict)
     slices: dict[str, str] = field(default_factory=dict)
     sockets: dict[str, str] = field(default_factory=dict)
@@ -437,6 +472,7 @@ class ModelRecipe:
         return {
             "race_profile": self.race_profile,
             "race_choice_id": self.race_choice_id,
+            "gender_presentation": self.gender_presentation,
             "bone_scales": {k: list(v) for k, v in self.bone_scales.items()},
             "slices": dict(self.slices),
             "sockets": dict(self.sockets),
@@ -473,6 +509,7 @@ class ModelRecipe:
         return cls(
             race_profile=data.get("race_profile", "human"),
             race_choice_id=data.get("race_choice_id", ""),
+            gender_presentation=data.get("gender_presentation"),
             bone_scales=dict(data.get("bone_scales", {})),
             slices=dict(data.get("slices", {})),
             sockets=dict(data.get("sockets", {})),
@@ -495,6 +532,7 @@ class PresentationProfile:
     material_tints_by_race: dict[str, dict[str, str]] = field(default_factory=dict)
     equipment_visuals: dict[str, str] = field(default_factory=dict)
     animation_style: str | None = None
+    gender_presentation: str | None = None
     sounds: dict[str, str] = field(default_factory=dict)
     effects: dict[str, str] = field(default_factory=dict)
     model_recipe: ModelRecipe | None = None
@@ -519,6 +557,11 @@ class PresentationProfile:
         errors: list[str] = []
         if self.scale <= 0:
             errors.append("scale must be positive")
+        if self.gender_presentation is not None and (
+            not isinstance(self.gender_presentation, str)
+            or self.gender_presentation not in {"male", "female"}
+        ):
+            errors.append("gender_presentation must be male or female")
         for tint_name, hex_code in self.material_tints.items():
             if not isinstance(hex_code, str) or not hex_code.startswith("#"):
                 errors.append(f"invalid hex code for tint '{tint_name}': {hex_code}")
@@ -548,6 +591,7 @@ class PresentationProfile:
             },
             "equipment_visuals": dict(self.equipment_visuals),
             "animation_style": self.animation_style,
+            "gender_presentation": self.gender_presentation,
             "sounds": dict(self.sounds),
             "effects": dict(self.effects),
         }
@@ -559,6 +603,12 @@ class PresentationProfile:
     def from_record(cls, data: dict[str, Any]) -> "PresentationProfile":
         model_recipe_data = data.get("model_recipe")
         model_recipe = ModelRecipe.from_record(model_recipe_data) if model_recipe_data else None
+        gender_presentation = data.get("gender_presentation")
+        if gender_presentation is not None and (
+            not isinstance(gender_presentation, str)
+            or gender_presentation not in {"male", "female"}
+        ):
+            raise ValueError("Draft has an invalid gender presentation")
         return cls(
             portrait=data.get("portrait"),
             token=data.get("token"),
@@ -572,6 +622,7 @@ class PresentationProfile:
             },
             equipment_visuals=dict(data.get("equipment_visuals", {})),
             animation_style=data.get("animation_style"),
+            gender_presentation=gender_presentation,
             sounds=dict(data.get("sounds", {})),
             effects=dict(data.get("effects", {})),
             model_recipe=model_recipe,

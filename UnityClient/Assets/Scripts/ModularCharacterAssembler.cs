@@ -167,6 +167,9 @@ public class ModularCharacterAssembler : MonoBehaviour
         Vector3 rootScale = recipe.GetBoneScale("root", defaultScale);
         rootBone.localScale = rootScale;
 
+        Vector3 hipsScale = recipe.GetBoneScale("hips", defaultScale);
+        hipsBone.localScale = hipsScale;
+
         Vector3 spineScale = recipe.GetBoneScale("spine", defaultScale);
         spineBone.localScale = spineScale;
 
