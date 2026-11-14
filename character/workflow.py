@@ -10,7 +10,7 @@ import uuid
 from character.builder import CharacterBuilder
 from character.equipment import calculate_starting_wealth
 from character.model import Character
-from character.presentation import PresentationProfile
+from character.presentation import PresentationProfile, generate_model_recipe
 from character.templates import CharacterTemplate
 
 RULESET_WORKFLOW_STEPS = {
@@ -1095,6 +1095,9 @@ class CreationWorkflow:
             issue["severity"] == "warning" for issue in unique_issues
         )
         character = self.builder.character
+        recipe = generate_model_recipe(self)
+        self.presentation.model_recipe = recipe
+        recipe_record = recipe.to_record()
         return {
             "can_finalize": not blocking and not strict_warning,
             "issues": unique_issues,
@@ -1107,11 +1110,15 @@ class CreationWorkflow:
             "overrides": deepcopy(character.overrides),
             "provenance": deepcopy(character.provenance),
             "presentation": self.presentation.to_record(),
+            "model_recipe": recipe_record,
             "equipment_state": deepcopy(self.equipment_state),
         }
 
     def to_draft_record(self) -> dict[str, Any]:
         character = self.builder.character
+        recipe = generate_model_recipe(self)
+        self.presentation.model_recipe = recipe
+        recipe_record = recipe.to_record()
         return {
             "id": self.character_id,
             "name": self.name,
@@ -1124,6 +1131,7 @@ class CreationWorkflow:
             "skill_ranks": dict(character.skill_ranks),
             "overrides": deepcopy(character.overrides),
             "presentation": self.presentation.to_record(),
+            "model_recipe": recipe_record,
             "derived": deepcopy(character.derived),
             "provenance": deepcopy(character.provenance),
             "equipment_state": deepcopy(self.equipment_state),

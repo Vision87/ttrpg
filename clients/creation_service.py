@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from copy import deepcopy
 from pathlib import Path
@@ -15,6 +16,7 @@ from assets.portrait_packs import (
     portrait_packs_for_ruleset,
 )
 from character.model import Character
+from character.presentation import generate_model_recipe
 from character.store import (
     CharacterStore,
     PackageVersionUnavailableError,
@@ -241,7 +243,86 @@ class CharacterCreationApplication:
             if len(suffix) == 1 and method == "GET":
                 return 200, self._draft_payload(workflow)
             if len(suffix) == 1 and method == "PUT":
+                if body.get("field_id") == "race":
+                    self._migrate_legacy_race_tints(workflow)
                 workflow.set_field(body.get("field_id"), body.get("value"))
+                self.store.save_draft(workflow)
+                return 200, self._draft_payload(workflow)
+            if (
+                len(suffix) == 3
+                and suffix[1:] == ["appearance", "colors"]
+                and method == "PUT"
+            ):
+                color_names = {
+                    "skin",
+                    "hair",
+                    "cloths",
+                    "secondary",
+                    "pants",
+                    "iris",
+                }
+                if not isinstance(body, dict):
+                    raise ValueError("Appearance color updates must be a JSON object")
+
+                if set(body) == {"tint_name", "color"}:
+                    tint_name = body["tint_name"]
+                    if not isinstance(tint_name, str) or tint_name not in color_names:
+                        raise ValueError("Unknown appearance color tint")
+                    color_updates = {tint_name: body["color"]}
+                else:
+                    color_updates = body
+                    if not color_updates:
+                        raise ValueError(
+                            "Appearance color updates must include at least one tint"
+                        )
+                    unknown_colors = set(color_updates) - color_names
+                    if unknown_colors:
+                        raise ValueError(
+                            "Unsupported appearance color field(s): "
+                            + ", ".join(sorted(unknown_colors))
+                        )
+
+                race_tints = None
+                recipe = None
+                if {"skin", "hair", "iris"} & set(color_updates):
+                    self._migrate_legacy_race_tints(workflow)
+                    recipe = generate_model_recipe(workflow)
+                    race_choice_id = recipe.race_choice_id
+                    race_tints = workflow.presentation.material_tints_by_race.setdefault(
+                        race_choice_id, {}
+                    )
+                    race_color_options = recipe.appearance_color_options
+
+                for color_name, color in color_updates.items():
+                    if not isinstance(color, str):
+                        raise ValueError(f"{color_name} color must be text")
+                    if color and re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None:
+                        raise ValueError(
+                            f"{color_name} color must be a #RRGGBB hex value"
+                        )
+                    if color_name in {"skin", "hair", "iris"}:
+                        if color:
+                            normalized_color = color.upper()
+                            if normalized_color not in race_color_options.get(
+                                color_name, []
+                            ):
+                                raise ValueError(
+                                    f"{color_name} color is not available for "
+                                    f"{recipe.race_choice_id}"
+                                )
+                            race_tints[color_name] = color.upper()
+                        else:
+                            race_tints.pop(color_name, None)
+                    elif color:
+                        workflow.configure_appearance(
+                            **{f"tint:{color_name}": color.upper()}
+                        )
+                    else:
+                        workflow.presentation.material_tints.pop(color_name, None)
+                if race_tints is not None and not race_tints:
+                    workflow.presentation.material_tints_by_race.pop(
+                        recipe.race_choice_id, None
+                    )
                 self.store.save_draft(workflow)
                 return 200, self._draft_payload(workflow)
             if (
@@ -576,6 +657,41 @@ class CharacterCreationApplication:
                 available[package_id] = version
         return available
 
+    @staticmethod
+    def _migrate_legacy_race_tints(workflow: CreationWorkflow) -> None:
+        recipe = generate_model_recipe(workflow)
+        race_choice_id = recipe.race_choice_id
+        race_profile = recipe.race_profile
+        race_color_options = recipe.appearance_color_options
+        material_tints = workflow.presentation.material_tints
+        material_tints_by_race = workflow.presentation.material_tints_by_race
+
+        legacy_profile_tints = material_tints_by_race.pop(race_profile, {})
+        if not isinstance(legacy_profile_tints, dict):
+            legacy_profile_tints = {}
+
+        legacy_shared_tints = {
+            tint_name: material_tints.pop(tint_name)
+            for tint_name in ("skin", "hair", "iris")
+            if tint_name in material_tints
+        }
+        if not legacy_profile_tints and not legacy_shared_tints:
+            return
+
+        race_tints = material_tints_by_race.setdefault(race_choice_id, {})
+        for tint_name in ("skin", "hair", "iris"):
+            for legacy_tints in (legacy_profile_tints, legacy_shared_tints):
+                color = legacy_tints.get(tint_name)
+                if (
+                    tint_name not in race_tints
+                    and isinstance(color, str)
+                    and color.upper() in race_color_options.get(tint_name, [])
+                ):
+                    race_tints[tint_name] = color.upper()
+                    break
+        if not race_tints:
+            material_tints_by_race.pop(race_choice_id, None)
+
     def _resolve_ruleset(
         self,
         package_id: str,
@@ -722,6 +838,7 @@ class CharacterCreationApplication:
                     )
         return {
             "draft": record,
+            "model_recipe": record.get("model_recipe"),
             "current_step": workflow.current_step,
             "field_values": field_values,
             "review": workflow.review(),

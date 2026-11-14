@@ -1536,3 +1536,518 @@ def test_equipment_wealth_recalculates_after_dark_heresy_career_change() -> None
         assert len(state["items"]) == 1
         resumed = app.handle("GET", f"/api/drafts/{draft_id}")[1]
         assert resumed["equipment_shop"]["state"] == state
+
+
+def test_creation_service_model_recipe_in_draft_payload() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "3D Model Character"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        assert "model_recipe" in created
+        assert "model_recipe" in created["draft"]
+        recipe = created["model_recipe"]
+        assert recipe["race_profile"] == "human"
+        assert "slices" in recipe
+        assert "sockets" in recipe
+        assert "bone_scales" in recipe
+        assert "bone_scales_list" in recipe
+        assert "slices_list" in recipe
+
+        # Select race: dwarf
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.dwarf"},
+        )
+        assert status == 200
+        recipe = updated["model_recipe"]
+        assert recipe["race_profile"] == "dwarf"
+        assert recipe["bone_scales"]["legs"][1] < 1.0
+        assert recipe["slices"]["hair"] == "beard_braided"
+
+        # Select class: fighter and wealth
+        app.handle("PUT", f"/api/drafts/{draft_id}", {"field_id": "class", "value": "class.fighter"})
+        app.handle("PUT", f"/api/drafts/{draft_id}", {"field_id": "strength", "value": 14})
+        app.handle("POST", f"/api/drafts/{draft_id}/equipment/wealth", {"method": "average"})
+
+        # Purchase and equip longsword
+        status, bought = app.handle(
+            "POST",
+            f"/api/drafts/{draft_id}/equipment/purchase",
+            {"item_id": "item.longsword"},
+        )
+        assert status == 200
+        instance_id = bought["equipment_shop"]["state"]["items"][0]["instance_id"]
+
+        status, equipped = app.handle(
+            "POST",
+            f"/api/drafts/{draft_id}/equipment/equip",
+            {"instance_id": instance_id, "slot": "main_hand"},
+        )
+        assert status == 200
+        recipe = equipped["model_recipe"]
+        assert recipe["sockets"]["main_hand"] == "wpn_sword"
+
+
+def test_appearance_colors_validate_and_persist_with_draft() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Color Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        colors = {
+            "skin": "#D9A77E",
+            "hair": "#432B1E",
+            "cloths": "#4567A8",
+            "secondary": "#9A5F31",
+        }
+
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            colors,
+        )
+
+        assert status == 200
+        shared_colors = {
+            name: color
+            for name, color in colors.items()
+            if name not in {"skin", "hair", "iris"}
+        }
+        assert updated["draft"]["presentation"]["material_tints"] == shared_colors
+        assert updated["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.human": {"skin": colors["skin"], "hair": colors["hair"]}
+        }
+        assert {
+            name: updated["model_recipe"]["palette_tints"][name]
+            for name in colors
+        } == colors
+
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {**colors, "skin": "not-a-color"},
+        )
+        assert status == 400
+
+        extended_colors = {
+            **colors,
+            "pants": "#385D47",
+            "iris": "#78614A",
+        }
+        extended_shared_colors = {
+            name: color
+            for name, color in extended_colors.items()
+            if name not in {"skin", "hair", "iris"}
+        }
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            extended_colors,
+        )
+        assert status == 200
+        assert updated["draft"]["presentation"]["material_tints"] == extended_shared_colors
+        assert {
+            name: updated["model_recipe"]["palette_tints"][name]
+            for name in extended_colors
+        } == extended_colors
+
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            colors,
+        )
+        assert status == 200
+        assert updated["draft"]["presentation"]["material_tints"] == extended_shared_colors
+
+        status, resumed = _application(directory).handle(
+            "GET",
+            f"/api/drafts/{draft_id}",
+        )
+        assert status == 200
+        assert resumed["draft"]["presentation"]["material_tints"] == extended_shared_colors
+
+
+def test_appearance_color_api_accepts_single_tint_updates() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Single Color Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        colors = {
+            "skin": "#D9A77E",
+            "hair": "#432B1E",
+            "cloths": "#4567A8",
+            "secondary": "#9A5F31",
+            "pants": "#385D47",
+            "iris": "#78614A",
+        }
+
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            colors,
+        )
+        assert status == 200
+
+        updated_colors = {**colors, "skin": "#E1AF8C"}
+        shared_colors = {
+            name: color
+            for name, color in colors.items()
+            if name not in {"skin", "hair", "iris"}
+        }
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {"skin": "#E1AF8C"},
+        )
+        assert status == 200
+        assert updated["draft"]["presentation"]["material_tints"] == shared_colors
+        assert updated["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.human": {
+                "skin": updated_colors["skin"],
+                "hair": updated_colors["hair"],
+                "iris": updated_colors["iris"],
+            }
+        }
+
+        updated_colors["iris"] = "#436B4D"
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {"tint_name": "iris", "color": "#436B4D"},
+        )
+        assert status == 200
+        assert updated["draft"]["presentation"]["material_tints"] == shared_colors
+
+        shared_colors.pop("pants")
+        status, updated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {"tint_name": "pants", "color": ""},
+        )
+        assert status == 200
+        assert updated["draft"]["presentation"]["material_tints"] == shared_colors
+
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {},
+        )
+        assert status == 400
+
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {"tint_name": "headgear", "color": "#AABBCC"},
+        )
+        assert status == 400
+
+
+def test_skin_hair_and_iris_colors_are_remembered_per_race() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Race Colors Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+
+        workflow = app._load_workflow(draft_id)
+        workflow.presentation.material_tints.update(
+            {"skin": "#D9A77E", "hair": "#432B1E", "iris": "#78614A"}
+        )
+        app.store.save_draft(workflow)
+
+        status, dwarf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.dwarf"},
+        )
+        assert status == 200
+        assert dwarf["draft"]["presentation"]["material_tints"] == {}
+        assert dwarf["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.human": {
+                "skin": "#D9A77E",
+                "hair": "#432B1E",
+                "iris": "#78614A",
+            }
+        }
+        assert dwarf["model_recipe"]["palette_tints"]["skin"] == 4
+        assert dwarf["model_recipe"]["palette_tints"]["hair"] == 12
+
+        dwarf_colors = {
+            "skin": "#A66B47",
+            "hair": "#C89643",
+            "iris": "#735B37",
+        }
+        status, dwarf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            dwarf_colors,
+        )
+        assert status == 200
+        assert {
+            name: dwarf["model_recipe"]["palette_tints"][name]
+            for name in dwarf_colors
+        } == dwarf_colors
+
+        status, human = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.human"},
+        )
+        assert status == 200
+        assert human["model_recipe"]["palette_tints"]["skin"] == "#D9A77E"
+        assert human["model_recipe"]["palette_tints"]["hair"] == "#432B1E"
+        assert human["model_recipe"]["palette_tints"]["iris"] == "#78614A"
+
+        status, resumed_dwarf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.dwarf"},
+        )
+        assert status == 200
+        assert resumed_dwarf["model_recipe"]["palette_tints"]["skin"] == "#A66B47"
+        assert resumed_dwarf["model_recipe"]["palette_tints"]["hair"] == "#C89643"
+        assert resumed_dwarf["model_recipe"]["palette_tints"]["iris"] == "#735B37"
+
+        status, reloaded = _application(directory).handle(
+            "GET",
+            f"/api/drafts/{draft_id}",
+        )
+        assert status == 200
+        assert reloaded["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.human": {
+                "skin": "#D9A77E",
+                "hair": "#432B1E",
+                "iris": "#78614A",
+            },
+            "race.dwarf": dwarf_colors,
+        }
+
+
+def test_subrace_colors_persist_independently_and_reject_unavailable_swatches() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Subrace Colors Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+
+        status, wood_elf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.elf.wood"},
+        )
+        assert status == 200
+        wood_colors = {
+            "skin": "#E1AF8C",
+            "hair": "#7A4A35",
+            "iris": "#436B4D",
+        }
+        status, wood_elf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            wood_colors,
+        )
+        assert status == 200
+        assert wood_elf["model_recipe"]["race_profile"] == "elf"
+        assert wood_elf["model_recipe"]["race_choice_id"] == "race.elf.wood"
+        assert wood_elf["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.elf.wood": wood_colors
+        }
+
+        status, drow = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.elf.drow"},
+        )
+        assert status == 200
+        assert drow["model_recipe"]["race_profile"] == "elf"
+        assert drow["model_recipe"]["race_choice_id"] == "race.elf.drow"
+        assert drow["model_recipe"]["appearance_color_options_list"] != (
+            wood_elf["model_recipe"]["appearance_color_options_list"]
+        )
+        assert drow["model_recipe"]["palette_tints"]["skin"] == "#49302A"
+        assert drow["model_recipe"]["palette_tints"]["hair"] == "#AFAFB5"
+        assert drow["model_recipe"]["palette_tints"]["iris"] == "#67688E"
+
+        for unavailable_skin in ("#FADCC3", "#69412D"):
+            status, _ = app.handle(
+                "PUT",
+                f"/api/drafts/{draft_id}/appearance/colors",
+                {"tint_name": "skin", "color": unavailable_skin},
+            )
+            assert status == 400
+        status, after_rejection = app.handle(
+            "GET",
+            f"/api/drafts/{draft_id}",
+        )
+        assert status == 200
+        assert "race.elf.drow" not in after_rejection["draft"]["presentation"][
+            "material_tints_by_race"
+        ]
+
+        drow_colors = {
+            "skin": "#49302A",
+            "hair": "#AFAFB5",
+            "iris": "#67688E",
+        }
+        status, drow = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            drow_colors,
+        )
+        assert status == 200
+        assert drow["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.elf.wood": wood_colors,
+            "race.elf.drow": drow_colors,
+        }
+
+        status, wood_elf = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.elf.wood"},
+        )
+        assert status == 200
+        assert {
+            name: wood_elf["model_recipe"]["palette_tints"][name]
+            for name in wood_colors
+        } == wood_colors
+
+        status, drow = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.elf.drow"},
+        )
+        assert status == 200
+        assert {
+            name: drow["model_recipe"]["palette_tints"][name]
+            for name in drow_colors
+        } == drow_colors
+
+        status, reloaded = _application(directory).handle(
+            "GET",
+            f"/api/drafts/{draft_id}",
+        )
+        assert status == 200
+        assert reloaded["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.elf.wood": wood_colors,
+            "race.elf.drow": drow_colors,
+        }
+
+
+def test_subrace_skin_palettes_accept_only_their_own_tones() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Subrace Skin Palette Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        cases = (
+            ("race.dwarf.duergar", "#A5A9B2", "#AF7D5A"),
+            ("race.elf.gray", "#F0E8E2", "#E7C7A1"),
+            ("race.elf.aquatic", "#D8E9E0", "#C89673"),
+            ("race.gnome.deep", "#B5B8C0", "#AF7D5A"),
+        )
+
+        for race_choice_id, allowed_skin, unavailable_skin in cases:
+            status, selected = app.handle(
+                "PUT",
+                f"/api/drafts/{draft_id}",
+                {"field_id": "race", "value": race_choice_id},
+            )
+            assert status == 200
+            assert selected["model_recipe"]["race_choice_id"] == race_choice_id
+
+            status, updated = app.handle(
+                "PUT",
+                f"/api/drafts/{draft_id}/appearance/colors",
+                {"tint_name": "skin", "color": allowed_skin},
+            )
+            assert status == 200
+            assert updated["model_recipe"]["palette_tints"]["skin"] == allowed_skin
+
+            status, _ = app.handle(
+                "PUT",
+                f"/api/drafts/{draft_id}/appearance/colors",
+                {"tint_name": "skin", "color": unavailable_skin},
+            )
+            assert status == 400
+
+            status, current = app.handle("GET", f"/api/drafts/{draft_id}")
+            assert status == 200
+            assert current["model_recipe"]["palette_tints"]["skin"] == allowed_skin
+
+
+def test_legacy_base_profile_colors_migrate_only_when_allowed() -> None:
+    with TemporaryDirectory() as directory:
+        app = _application(directory)
+        status, created = app.handle(
+            "POST",
+            "/api/drafts",
+            {"ruleset_id": "dnd35-core", "name": "Legacy Palette Migration Test"},
+        )
+        assert status == 201
+        draft_id = created["draft"]["id"]
+        status, _ = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}",
+            {"field_id": "race", "value": "race.elf.wood"},
+        )
+        assert status == 200
+
+        workflow = app._load_workflow(draft_id)
+        workflow.presentation.material_tints.update(
+            {
+                "skin": "#D9A77E",
+                "hair": "#502D19",
+                "iris": "#67688E",
+            }
+        )
+        workflow.presentation.material_tints_by_race["elf"] = {
+            "skin": "#FADCC3",
+            "hair": "#7A4A35",
+            "iris": "#426A9D",
+        }
+        app.store.save_draft(workflow)
+
+        status, migrated = app.handle(
+            "PUT",
+            f"/api/drafts/{draft_id}/appearance/colors",
+            {"tint_name": "skin", "color": "#E1AF8C"},
+        )
+        assert status == 200
+        assert migrated["draft"]["presentation"]["material_tints"] == {}
+        assert migrated["draft"]["presentation"]["material_tints_by_race"] == {
+            "race.elf.wood": {
+                "skin": "#E1AF8C",
+                "hair": "#7A4A35",
+                "iris": "#426A9D",
+            }
+        }
+        assert migrated["model_recipe"]["palette_tints"]["skin"] == "#E1AF8C"
+        assert migrated["model_recipe"]["palette_tints"]["hair"] == "#7A4A35"
+        assert migrated["model_recipe"]["palette_tints"]["iris"] == "#426A9D"

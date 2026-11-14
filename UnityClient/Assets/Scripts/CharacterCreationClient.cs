@@ -65,12 +65,42 @@ public sealed class CharacterCreationClient : MonoBehaviour
         new Dictionary<string, HashSet<string>>();
     private readonly Dictionary<string, float> skillRankValues =
         new Dictionary<string, float>();
+    private readonly Dictionary<string, string> appearanceColors =
+        new Dictionary<string, string>();
+    private static readonly string[] SkinColorOptions =
+    {
+        "#FADCC3", "#F0C8AA", "#E1AF8C", "#C89673", "#AF7D5A", "#69412D"
+    };
+    private static readonly string[] HairColorOptions =
+    {
+        "#F0DC8C", "#DCA05A", "#B45A28", "#502D19", "#AFAFB5", "#503070"
+    };
+    private static readonly string[] ClothesColorOptions =
+    {
+        "#4472C4", "#9C2F2F", "#416B3D", "#70469D", "#D5D5D5", "#ECE1C5"
+    };
+    private static readonly string[] ClothesAccentColorOptions =
+    {
+        "#8C5A2B", "#A23E48", "#D3A14B", "#2F5D50", "#E3D7C2", "#343944"
+    };
+    private static readonly string[] PantsColorOptions =
+    {
+        "#4472C4", "#9C2F2F", "#416B3D", "#70469D", "#D5D5D5", "#8C5A2B"
+    };
+    private static readonly string[] IrisColorOptions =
+    {
+        "#604E41", "#436B4D", "#426A9D", "#735B37", "#67688E", "#3C3030"
+    };
     private readonly HashSet<string> expandedChoiceFields = new HashSet<string>();
     private TacticalProjection tacticalProjection;
     private ImmersiveProjection immersiveProjection;
+    private CharacterTurntablePreview turntablePreview;
+    private bool showExpanded3DPreview = false;
     private Vector2 scrollPosition;
     private Vector2 bodyScrollPosition;
     private string bodyScrollStepId = "";
+    private Vector2 appearanceColorScrollPosition;
+    private float editingAreaWidth;
     private float editingAreaHeight;
     private float editingChromeBottom;
     private Vector2 featListScrollPosition;
@@ -160,6 +190,11 @@ public sealed class CharacterCreationClient : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (turntablePreview != null)
+        {
+            Destroy(turntablePreview.gameObject);
+            turntablePreview = null;
+        }
         foreach (var texture in generatedPortraitTextures.Values)
         {
             if (texture != null)
@@ -317,7 +352,417 @@ public sealed class CharacterCreationClient : MonoBehaviour
         {
             GUILayout.Label(errorMessage, ErrorStyle());
         }
-        DrawCreationStep();
+
+        UiLayout.Density density = UiLayout.CurrentDensity;
+        if (showExpanded3DPreview)
+        {
+            if (CreationUiStyles.TertiaryButton(
+                "Back to Editor",
+                GUILayout.ExpandWidth(true)))
+            {
+                showExpanded3DPreview = false;
+            }
+            float previewWidth = editingAreaWidth;
+            float previewHeight = Mathf.Max(
+                160f,
+                editingAreaHeight - density.TertiaryHeight - 24f);
+            DrawTurntablePreview(
+                previewWidth,
+                previewHeight,
+                horizontalLayout: Screen.width >= UiLayout.SmMax);
+        }
+        else
+        {
+            DrawCompactTurntablePreview(editingAreaWidth);
+            DrawCreationStep();
+        }
+    }
+
+    private void EnsureTurntablePreview()
+    {
+        if (turntablePreview == null)
+        {
+            var previewObj = new GameObject("CharacterTurntablePreview");
+            turntablePreview = previewObj.AddComponent<CharacterTurntablePreview>();
+            turntablePreview.Initialize();
+            var recipe = draft?.model_recipe ?? draft?.draft?.model_recipe;
+            if (recipe != null)
+            {
+                turntablePreview.UpdateRecipe(recipe);
+            }
+        }
+    }
+
+    private void DrawTurntablePreview(
+        float width,
+        float height,
+        bool horizontalLayout = false)
+    {
+        EnsureTurntablePreview();
+        if (turntablePreview == null || turntablePreview.PreviewTexture == null)
+        {
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(width), GUILayout.Height(height));
+            GUILayout.Label(
+                "The 3D preview is unavailable on this device.",
+                CreationUiStyles.Caption);
+            GUILayout.EndVertical();
+            return;
+        }
+
+        if (horizontalLayout)
+        {
+            GUILayout.BeginHorizontal(
+                GUI.skin.box,
+                GUILayout.Width(width),
+                GUILayout.Height(height));
+            float previewColumnWidth = Mathf.Clamp(width * 0.4f, 220f, 330f);
+            GUILayout.BeginVertical(
+                GUILayout.Width(previewColumnWidth),
+                GUILayout.ExpandHeight(true));
+            GUILayout.Label("3D CHARACTER PREVIEW", CreationUiStyles.Caption);
+            DrawPreviewTexture(
+                previewColumnWidth - 16f,
+                Mathf.Clamp(height * 0.58f, 80f, 300f));
+            DrawPreviewRotationControls();
+            GUILayout.EndVertical();
+
+            GUILayout.Space(8f);
+            GUILayout.BeginVertical(
+                GUILayout.ExpandWidth(true),
+                GUILayout.ExpandHeight(true));
+            DrawAppearanceColors(
+                width - previewColumnWidth - 32f,
+                Mathf.Max(60f, height - 64f));
+            GUILayout.EndVertical();
+            GUILayout.EndHorizontal();
+            return;
+        }
+
+        GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(width), GUILayout.Height(height));
+        GUILayout.Label("3D CHARACTER PREVIEW", CreationUiStyles.Caption);
+        float textureHeight = Mathf.Clamp(height * 0.34f, 80f, 240f);
+        DrawPreviewTexture(width - 16f, textureHeight);
+        DrawPreviewRotationControls();
+
+        float appearanceHeight = Mathf.Max(60f, height - textureHeight - 116f);
+        DrawAppearanceColors(width - 16f, appearanceHeight);
+        GUILayout.EndVertical();
+    }
+
+    private void DrawCompactTurntablePreview(float width)
+    {
+        EnsureTurntablePreview();
+        float height = Mathf.Clamp(editingAreaHeight * 0.22f, 112f, 160f);
+        GUILayout.BeginHorizontal(
+            GUI.skin.box,
+            GUILayout.Width(width),
+            GUILayout.Height(height));
+
+        float previewWidth = Mathf.Clamp(width * 0.38f, 96f, 220f);
+        GUILayout.BeginVertical(
+            GUILayout.Width(previewWidth),
+            GUILayout.ExpandHeight(true));
+        GUILayout.Label("3D PREVIEW", CreationUiStyles.Caption);
+        bool previewAvailable =
+            turntablePreview != null && turntablePreview.PreviewTexture != null;
+        if (previewAvailable)
+        {
+            DrawPreviewTexture(
+                previewWidth - 16f,
+                Mathf.Max(60f, height - 40f));
+        }
+        else
+        {
+            GUILayout.Label(
+                "Preview unavailable on this device.",
+                CreationUiStyles.Caption);
+        }
+        GUILayout.EndVertical();
+
+        GUILayout.Space(8f);
+        GUILayout.BeginVertical(
+            GUILayout.ExpandWidth(true),
+            GUILayout.ExpandHeight(true));
+        if (previewAvailable)
+        {
+            GUILayout.Label(
+                "Drag to rotate. Open for color controls.",
+                CreationUiStyles.Caption);
+            DrawPreviewRotationControls(compact: true);
+            if (CreationUiStyles.TertiaryButton(
+                "Customize Preview",
+                GUILayout.ExpandWidth(true)))
+            {
+                showExpanded3DPreview = true;
+            }
+        }
+        else
+        {
+            GUILayout.Label(
+                "Continue editing your character below.",
+                CreationUiStyles.Caption);
+        }
+        GUILayout.EndVertical();
+        GUILayout.EndHorizontal();
+    }
+
+    private void DrawPreviewTexture(float width, float height)
+    {
+        Rect previewRect = GUILayoutUtility.GetRect(width, height);
+        GUI.DrawTexture(previewRect, turntablePreview.PreviewTexture, ScaleMode.ScaleToFit);
+
+        int controlId = GUIUtility.GetControlID(FocusType.Passive);
+        Event evt = Event.current;
+        if (evt.type == EventType.MouseDown && previewRect.Contains(evt.mousePosition))
+        {
+            GUIUtility.hotControl = controlId;
+            evt.Use();
+        }
+        else if (evt.type == EventType.MouseDrag && GUIUtility.hotControl == controlId)
+        {
+            turntablePreview.OnDrag(evt.delta);
+            evt.Use();
+        }
+        else if (evt.type == EventType.MouseUp && GUIUtility.hotControl == controlId)
+        {
+            GUIUtility.hotControl = 0;
+            evt.Use();
+        }
+        else if (evt.type == EventType.ScrollWheel && previewRect.Contains(evt.mousePosition))
+        {
+            turntablePreview.OnZoom(evt.delta.y);
+            evt.Use();
+        }
+    }
+
+    private void DrawPreviewRotationControls(bool compact = false)
+    {
+        GUILayout.BeginHorizontal();
+        if (CreationUiStyles.IconButton(new GUIContent("↺"), GUILayout.Width(36), GUILayout.Height(24)))
+        {
+            turntablePreview.OnDrag(new Vector2(-30f, 0));
+        }
+        if (CreationUiStyles.IconButton(new GUIContent("↻"), GUILayout.Width(36), GUILayout.Height(24)))
+        {
+            turntablePreview.OnDrag(new Vector2(30f, 0));
+        }
+        if (!compact)
+        {
+            GUILayout.FlexibleSpace();
+            GUILayout.Label("Drag to spin", CreationUiStyles.Caption);
+        }
+        GUILayout.EndHorizontal();
+    }
+
+    private void DrawAppearanceColors(float width, float height)
+    {
+        ModelRecipeDto recipe = draft?.model_recipe ?? draft?.draft?.model_recipe;
+        string raceProfile = recipe != null &&
+            !string.IsNullOrEmpty(recipe.race_profile)
+                ? recipe.race_profile
+                : "human";
+        string raceChoice = recipe?.race_choice_id;
+        string raceLabel = !string.IsNullOrEmpty(raceChoice)
+            ? raceChoice.Replace("race.", "").Replace(".", " ").ToUpperInvariant()
+            : raceProfile.ToUpperInvariant();
+        GUILayout.Space(4f);
+        GUILayout.Label(
+            "MODEL COLOR CUSTOMIZATION - " + raceLabel,
+            CreationUiStyles.Caption);
+        GUILayout.Label(
+            "Each swatch changes only its listed area. Default resets that row.",
+            CreationUiStyles.Caption,
+            GUILayout.Width(width));
+        appearanceColorScrollPosition = GUILayout.BeginScrollView(
+            appearanceColorScrollPosition,
+            GUILayout.Height(height));
+        DrawAppearanceColorRow(
+            "Skin tone",
+            "Face, neck, ears, exposed arms and hands.",
+            "skin",
+            GetRaceColorOptions(recipe, "skin", SkinColorOptions),
+            width);
+        DrawAppearanceColorRow(
+            "Hair color",
+            "Scalp, beard and eyebrows.",
+            "hair",
+            GetRaceColorOptions(recipe, "hair", HairColorOptions),
+            width);
+        DrawAppearanceColorRow(
+            "Upper clothing",
+            "Torso garment and sleeves; metal armor stays unchanged.",
+            "cloths",
+            ClothesColorOptions,
+            width);
+        DrawAppearanceColorRow(
+            "Clothing accents",
+            "Belts, straps, cuffs, boots and garment trim.",
+            "secondary",
+            ClothesAccentColorOptions,
+            width);
+        DrawAppearanceColorRow(
+            "Trouser fabric",
+            "Leg fabric; armored leg pieces stay unchanged.",
+            "pants",
+            PantsColorOptions,
+            width);
+        DrawAppearanceColorRow(
+            "Eye iris",
+            "Colored rings only; eye whites and pupils stay fixed.",
+            "iris",
+            GetRaceColorOptions(recipe, "iris", IrisColorOptions),
+            width);
+        GUILayout.EndScrollView();
+    }
+
+    private static string[] GetRaceColorOptions(
+        ModelRecipeDto recipe,
+        string tintName,
+        string[] fallback)
+    {
+        if (recipe == null || string.IsNullOrEmpty(recipe.race_choice_id))
+        {
+            return fallback;
+        }
+
+        string[] options = recipe?.GetAppearanceColorOptions(tintName);
+        return options ?? Array.Empty<string>();
+    }
+
+    private void DrawAppearanceColorRow(
+        string label,
+        string description,
+        string tintName,
+        string[] options,
+        float width)
+    {
+        GUILayout.BeginVertical();
+        bool inlineLayout = width >= 360f;
+        if (inlineLayout)
+        {
+            GUILayout.BeginHorizontal();
+            float labelWidth = Mathf.Clamp(width * 0.3f, 96f, 132f);
+            GUILayout.BeginVertical(GUILayout.Width(labelWidth));
+            GUILayout.Label(label, CreationUiStyles.Caption);
+            GUILayout.Label(
+                description,
+                CreationUiStyles.Caption,
+                GUILayout.Width(labelWidth));
+            GUILayout.EndVertical();
+            GUILayout.Space(6f);
+        }
+        else
+        {
+            GUILayout.Label(label, CreationUiStyles.Caption);
+            GUILayout.Label(description, CreationUiStyles.Caption, GUILayout.Width(width));
+        }
+
+        GUILayout.BeginHorizontal();
+        appearanceColors.TryGetValue(tintName, out var selectedColor);
+        foreach (string option in options)
+        {
+            if (!ColorUtility.TryParseHtmlString(option, out var color))
+            {
+                continue;
+            }
+
+            Color previousBackground = GUI.backgroundColor;
+            GUI.backgroundColor = color;
+            bool selected = string.Equals(selectedColor, option, StringComparison.OrdinalIgnoreCase);
+            bool clicked = GUILayout.Button(
+                new GUIContent(selected ? "✓" : "", option),
+                GUILayout.Width(22f),
+                GUILayout.Height(24f));
+            GUI.backgroundColor = previousBackground;
+            if (clicked)
+            {
+                SelectAppearanceColor(tintName, option);
+            }
+        }
+
+        if (GUILayout.Button("Default", GUILayout.Width(48f), GUILayout.Height(24f)))
+        {
+            SelectAppearanceColor(tintName, "");
+        }
+        GUILayout.EndHorizontal();
+        GUILayout.Space(4f);
+        if (inlineLayout)
+        {
+            GUILayout.EndHorizontal();
+        }
+        GUILayout.EndVertical();
+    }
+
+    private void SelectAppearanceColor(string tintName, string color)
+    {
+        bool hadPrevious = appearanceColors.TryGetValue(tintName, out var previousColor);
+        if (string.IsNullOrEmpty(color))
+        {
+            appearanceColors.Remove(tintName);
+        }
+        else
+        {
+            appearanceColors[tintName] = color;
+        }
+        StartCoroutine(SaveAppearanceColor(tintName, hadPrevious, previousColor));
+    }
+
+    private IEnumerator SaveAppearanceColor(
+        string changedTint,
+        bool hadPrevious,
+        string previousColor)
+    {
+        if (string.IsNullOrEmpty(draftId))
+        {
+            errorMessage = "Save a character draft before customizing its colors.";
+            RestoreAppearanceColor(changedTint, hadPrevious, previousColor);
+            yield break;
+        }
+
+        var payload = new AppearanceColorUpdateRequestDto
+        {
+            tint_name = changedTint,
+            color = appearanceColors.TryGetValue(changedTint, out var selectedColor)
+                ? selectedColor
+                : ""
+        };
+        yield return SendRequest(
+            "PUT",
+            "/api/drafts/" + Uri.EscapeDataString(draftId) + "/appearance/colors",
+            JsonUtility.ToJson(payload),
+            (status, response) =>
+            {
+                if (!IsSuccess(status))
+                {
+                    RestoreAppearanceColor(changedTint, hadPrevious, previousColor);
+                    SetError(response);
+                    return;
+                }
+
+                var updated = JsonUtility.FromJson<DraftResponseDto>(response);
+                if (updated == null || updated.draft == null)
+                {
+                    RestoreAppearanceColor(changedTint, hadPrevious, previousColor);
+                    SetError("The service returned an invalid color update.");
+                    return;
+                }
+                ApplyDraft(updated, preserveLocalValues: true);
+            });
+    }
+
+    private void RestoreAppearanceColor(
+        string tintName,
+        bool hadPrevious,
+        string previousColor)
+    {
+        if (hadPrevious)
+        {
+            appearanceColors[tintName] = previousColor;
+        }
+        else
+        {
+            appearanceColors.Remove(tintName);
+        }
     }
 
     private void DrawRulesets()
@@ -525,6 +970,12 @@ public sealed class CharacterCreationClient : MonoBehaviour
         draftId = response.draft.id;
         characterName = response.draft.name;
         activeTheme = response.theme;
+        var recipe = response.model_recipe ?? response.draft?.model_recipe;
+        LoadAppearanceColors(recipe);
+        if (recipe != null && turntablePreview != null)
+        {
+            turntablePreview.UpdateRecipe(recipe);
+        }
         serverFieldValues.Clear();
         if (!preserveLocalValues)
         {
@@ -568,6 +1019,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     skillRankValues[option.skill_id] = option.ranks;
                 }
             }
+
         }
 
         var generation = response.portrait_generation;
@@ -640,6 +1092,25 @@ public sealed class CharacterCreationClient : MonoBehaviour
                     applied.image_url,
                     applied.reference,
                     GeneratedPortraitImageTarget.Applied));
+            }
+        }
+    }
+
+    private void LoadAppearanceColors(ModelRecipeDto recipe)
+    {
+        appearanceColors.Clear();
+        if (recipe == null)
+        {
+            return;
+        }
+
+        foreach (string tintName in new[] { "skin", "hair", "cloths", "secondary", "pants", "iris" })
+        {
+            string value = recipe.GetPaletteTint(tintName);
+            if (ColorUtility.TryParseHtmlString(value, out var color))
+            {
+                appearanceColors[tintName] =
+                    "#" + ColorUtility.ToHtmlStringRGB(color);
             }
         }
     }
@@ -4146,6 +4617,7 @@ public sealed class CharacterCreationClient : MonoBehaviour
             contentRect.y + inset,
             Mathf.Max(0f, contentRect.width - 2f * inset),
             Mathf.Max(0f, contentRect.height - 2f * inset));
+        editingAreaWidth = innerRect.width;
         editingAreaHeight = innerRect.height;
         GUILayout.BeginArea(innerRect);
     }

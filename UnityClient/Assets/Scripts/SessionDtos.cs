@@ -40,6 +40,104 @@ public class EntityDto
 }
 
 [Serializable]
+public class BoneScaleDto
+{
+    public string bone;
+    public float x;
+    public float y;
+    public float z;
+}
+
+[Serializable]
+public class NamedStringDto
+{
+    public string name;
+    public string value;
+}
+
+[Serializable]
+public class NamedStringArrayDto
+{
+    public string name;
+    public string[] values;
+}
+
+[Serializable]
+public class ModelRecipeDto
+{
+    public string race_profile;
+    public string race_choice_id;
+    public BoneScaleDto[] bone_scales_list;
+    public NamedStringDto[] slices_list;
+    public NamedStringDto[] sockets_list;
+    public NamedStringDto[] palette_tints_list;
+    public NamedStringArrayDto[] appearance_color_options_list;
+
+    public string GetPaletteTint(string tintName)
+    {
+        if (palette_tints_list == null) return null;
+        for (int i = 0; i < palette_tints_list.Length; i++)
+        {
+            if (palette_tints_list[i] != null && palette_tints_list[i].name == tintName)
+                return palette_tints_list[i].value;
+        }
+        return null;
+    }
+
+    public string[] GetAppearanceColorOptions(string tintName)
+    {
+        if (appearance_color_options_list == null) return null;
+        for (int i = 0; i < appearance_color_options_list.Length; i++)
+        {
+            if (appearance_color_options_list[i] != null &&
+                appearance_color_options_list[i].name == tintName)
+                return appearance_color_options_list[i].values;
+        }
+        return null;
+    }
+
+    public string GetSlice(string slotName, string fallback = null)
+    {
+        if (slices_list == null) return fallback;
+        for (int i = 0; i < slices_list.Length; i++)
+        {
+            if (slices_list[i] != null && slices_list[i].name == slotName)
+                return slices_list[i].value;
+        }
+        return fallback;
+    }
+
+    public string GetSocket(string socketName, string fallback = null)
+    {
+        if (sockets_list == null) return fallback;
+        for (int i = 0; i < sockets_list.Length; i++)
+        {
+            if (sockets_list[i] != null && sockets_list[i].name == socketName)
+                return sockets_list[i].value;
+        }
+        return fallback;
+    }
+
+    public Vector3 GetBoneScale(string boneName, Vector3 fallback)
+    {
+        if (bone_scales_list == null) return fallback;
+        for (int i = 0; i < bone_scales_list.Length; i++)
+        {
+            if (bone_scales_list[i] != null && bone_scales_list[i].bone == boneName)
+                return new Vector3(bone_scales_list[i].x, bone_scales_list[i].y, bone_scales_list[i].z);
+        }
+        return fallback;
+    }
+}
+
+[Serializable]
+public class AppearanceColorUpdateRequestDto
+{
+    public string tint_name;
+    public string color;
+}
+
+[Serializable]
 public class CharacterPresentationDto
 {
     public string portrait;
@@ -48,6 +146,7 @@ public class CharacterPresentationDto
     public string model;
     public float scale;
     public string animation_style;
+    public ModelRecipeDto model_recipe;
 }
 
 [Serializable]
@@ -323,6 +422,8 @@ public class DraftRecordDto
     public string template_id;
     public AbilityRollEventDto[] ability_roll_events;
     public EquipmentStateDto equipment_state;
+    public CharacterPresentationDto presentation;
+    public ModelRecipeDto model_recipe;
 }
 
 [Serializable]
@@ -424,6 +525,7 @@ public class EquipmentShopDto
 public class DraftResponseDto
 {
     public DraftRecordDto draft;
+    public ModelRecipeDto model_recipe;
     public string current_step;
     public DraftFieldValueDto[] field_values;
     public ReviewDto review;

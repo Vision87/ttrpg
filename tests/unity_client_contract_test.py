@@ -29,6 +29,98 @@ def test_unity_client_keeps_rules_out_of_projections() -> None:
     assert "SessionEnvelopeDto" in source
 
 
+def test_low_poly_palette_shader_uses_semantic_tint_regions() -> None:
+    builder = (ROOT / "Assets/Scripts/LowPolyCharacterBuilder.cs").read_text()
+    assembler = (ROOT / "Assets/Scripts/ModularCharacterAssembler.cs").read_text()
+    shader_path = ROOT / "Assets/Resources/LowPolyPalette.shader"
+    shader = shader_path.read_text()
+
+    assert 'Resources.Load<Shader>("LowPolyPalette")' in builder
+    assert "int y = 15 - swatchIndex / 16;" in builder
+    assert 'ApplyPaletteTint(\n            recipe,\n            "secondary"' in assembler
+    for tint_name in ("skin", "hair", "cloths", "pants", "secondary", "iris"):
+        assert f'"{tint_name}"' in assembler
+    for region_id in range(1, 7):
+        assert f"i.tintRegion == {region_id}.0" in shader
+    assert "swatchIndex ==" not in shader
+    assert "private Material sharedMaterial;" in assembler
+    assert "sharedMaterial = LowPolyCharacterBuilder.CreatePaletteMaterial();" in assembler
+    assert "mr.sharedMaterial = material;" in builder
+
+
+def test_low_poly_meshes_preserve_semantic_tint_regions_when_combined() -> None:
+    builder = (ROOT / "Assets/Scripts/LowPolyCharacterBuilder.cs").read_text()
+
+    assert "mesh.uv2 = tintUvs;" in builder
+    assert "tintUvs[i] = new Vector2((float)tintRegion, 0f);" in builder
+    assert "combined.CombineMeshes(combines.ToArray(), true, true);" in builder
+    for region in ("Skin", "Hair", "UpperClothing", "Pants", "Accent", "Iris"):
+        assert f"AppearanceTintRegion.{region}" in builder
+    assert "new Vector3(0.026f, 0.028f, 0.012f)" in builder
+    assert "new Vector3(0.045f, 0.035f, 0.02f), 112);" in builder
+    assert "new Vector3(0.012f, 0.02f, 0.008f), 120);" in builder
+
+    # Sword grips reuse an accent palette swatch but remain outside that region.
+    assert (
+        "CreateFacetedBox(Vector3.zero, new Vector3(0.04f, 0.2f, 0.04f), 35);"
+        in builder
+    )
+
+
+def test_character_creator_persists_trouser_and_iris_color_controls() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+
+    assert '"Trouser fabric"' in creator
+    assert '"Eye iris"' in creator
+    for description in (
+        "Face, neck, ears, exposed arms and hands.",
+        "Scalp, beard and eyebrows.",
+        "Torso garment and sleeves; metal armor stays unchanged.",
+        "Belts, straps, cuffs, boots and garment trim.",
+        "Leg fabric; armored leg pieces stay unchanged.",
+        "Colored rings only; eye whites and pupils stay fixed.",
+    ):
+        assert f'"{description}"' in creator
+    assert "AppearanceColorUpdateRequestDto" in creator
+    assert "tint_name = changedTint" in creator
+    assert "public string tint_name;" in dtos
+    assert "public string color;" in dtos
+
+
+def test_race_choice_recipe_drives_skin_hair_and_iris_swatches() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+
+    assert "public string race_choice_id;" in dtos
+    assert "public NamedStringArrayDto[] appearance_color_options_list;" in dtos
+    assert "public string[] GetAppearanceColorOptions(string tintName)" in dtos
+    assert 'GetRaceColorOptions(recipe, "skin", SkinColorOptions)' in creator
+    assert 'GetRaceColorOptions(recipe, "hair", HairColorOptions)' in creator
+    assert 'GetRaceColorOptions(recipe, "iris", IrisColorOptions)' in creator
+    assert "raceChoice.Replace" in creator
+    assert "return options ?? Array.Empty<string>();" in creator
+    assert "options.Length > 0 ? options : fallback" not in creator
+
+
+def test_appearance_color_rows_fit_narrow_and_wide_preview_panels() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+
+    assert "float textureHeight = Mathf.Clamp(height * 0.34f, 80f, 240f);" in creator
+    assert "float appearanceHeight = Mathf.Max(60f, height - textureHeight - 116f);" in creator
+    assert "appearanceColorScrollPosition = GUILayout.BeginScrollView(" in creator
+    assert "DrawAppearanceColors(width - 16f, appearanceHeight);" in creator
+    assert 'GUILayout.Width(22f)' in creator
+
+    narrow_swatch_row = 6 * 22 + 48 + 7 * 8
+    for panel_width in (244, 384):
+        assert narrow_swatch_row <= panel_width
+    for panel_height in (280, 500):
+        texture_height = min(240, max(80, panel_height * 0.34))
+        appearance_height = max(60, panel_height - texture_height - 116)
+        assert texture_height + appearance_height + 116 <= panel_height
+
+
 def test_unity_client_renders_package_flows_and_ruleset_themes_generically() -> None:
     creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
     projections = (ROOT / "Assets/Scripts/SessionProjection.cs").read_text()
@@ -573,6 +665,30 @@ def test_creation_layout_uses_shared_density_and_fixed_chrome() -> None:
     assert "CreationUiStyles.PrimaryButton" in creator
     assert "CreationUiStyles.TertiaryButton" in creator
     assert "public static GUIStyle Selection" in styles
+    assert "editingAreaWidth = innerRect.width;" in creator
+    preview_shell = creator[
+        creator.index("private void DrawEditingShell"):
+        creator.index("private void EnsureTurntablePreview")
+    ]
+    assert '"Back to Editor"' in preview_shell
+    assert "horizontalLayout: Screen.width >= UiLayout.SmMax" in preview_shell
+    assert "DrawCompactTurntablePreview(editingAreaWidth)" in preview_shell
+    assert "if (density.SideBySide)" not in preview_shell
+    assert preview_shell.index("if (showExpanded3DPreview)") < preview_shell.rindex(
+        "DrawCreationStep();"
+    )
+    preview = creator[
+        creator.index("private void DrawTurntablePreview"):
+        creator.index("private void DrawPreviewTexture")
+    ]
+    assert "if (horizontalLayout)" in preview
+    assert "DrawAppearanceColors(" in preview
+    color_row = creator[
+        creator.index("private void DrawAppearanceColorRow"):
+        creator.index("private void SelectAppearanceColor")
+    ]
+    assert "bool inlineLayout = width >= 360f;" in color_row
+    assert "GUILayout.Width(22f)" in color_row
     editing = creator[
         creator.index("private void DrawCreationStep"):
         creator.index("private void DrawScoreGroups")
@@ -625,3 +741,39 @@ def test_creation_ui_declares_readable_type_roles_and_theme_safe_surfaces() -> N
     assert "CaptionFont = 15" in mobile
     assert "SideBySide = false" in mobile
     assert "if (!sideBySide)" in creator
+
+
+def test_model_recipe_dto_contract() -> None:
+    session_dtos = (ROOT / "Assets/Scripts/SessionDtos.cs").read_text()
+    assert "public class ModelRecipeDto" in session_dtos
+    assert "public class BoneScaleDto" in session_dtos
+    assert "public class NamedStringDto" in session_dtos
+    assert "public ModelRecipeDto model_recipe;" in session_dtos
+    assert "public string race_profile;" in session_dtos
+    assert "public BoneScaleDto[] bone_scales_list;" in session_dtos
+    assert "public NamedStringDto[] slices_list;" in session_dtos
+    assert "public NamedStringDto[] sockets_list;" in session_dtos
+
+
+def test_character_turntable_preview_contract() -> None:
+    creator = (ROOT / "Assets/Scripts/CharacterCreationClient.cs").read_text()
+    assert "CharacterTurntablePreview turntablePreview;" in creator
+    assert "DrawTurntablePreview" in creator
+    assert "EnsureTurntablePreview" in creator
+    assert "turntablePreview.UpdateRecipe" in creator
+    assert "3D CHARACTER PREVIEW" in creator
+
+    preview = (ROOT / "Assets/Scripts/CharacterTurntablePreview.cs").read_text()
+    assert "public class CharacterTurntablePreview : MonoBehaviour" in preview
+    assert "RenderTexture" in preview
+    assert "ModularCharacterAssembler assembler;" in preview
+    assert "OnDrag" in preview
+    assert "OnZoom" in preview
+    assert "UpdateRecipe(ModelRecipeDto recipe)" in preview
+
+    assembler = (ROOT / "Assets/Scripts/ModularCharacterAssembler.cs").read_text()
+    assert "public class ModularCharacterAssembler : MonoBehaviour" in assembler
+    assert "ApplyRecipe(ModelRecipeDto recipe)" in assembler
+    assert "ApplyBoneScales" in assembler
+    assert "ApplySlice" in assembler
+    assert "ApplyProp" in assembler

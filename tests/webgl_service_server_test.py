@@ -51,9 +51,25 @@ def test_webgl_server_serves_api_static_files_and_gzip_headers() -> None:
                 rulesets = json.loads(response.read())
                 assert response.status == 200
                 assert len(rulesets["rulesets"]) == 2
+                assert (
+                    response.headers["Cross-Origin-Opener-Policy"]
+                    == "same-origin"
+                )
+                assert (
+                    response.headers["Cross-Origin-Embedder-Policy"]
+                    == "require-corp"
+                )
 
             with urlopen(f"{base_url}/") as response:
                 assert response.read() == b"<html>demo</html>"
+                assert (
+                    response.headers["Cross-Origin-Opener-Policy"]
+                    == "same-origin"
+                )
+                assert (
+                    response.headers["Cross-Origin-Embedder-Policy"]
+                    == "require-corp"
+                )
 
             with urlopen(f"{base_url}/app.js.gz") as response:
                 assert response.headers["Content-Encoding"] == "gzip"

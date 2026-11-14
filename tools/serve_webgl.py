@@ -46,6 +46,8 @@ class UnityWebGLHandler(SimpleHTTPRequestHandler):
         if path.endswith(".gz"):
             self.send_header("Content-Encoding", "gzip")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         super().end_headers()
 
 
